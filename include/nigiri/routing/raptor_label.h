@@ -5,8 +5,7 @@
 namespace nigiri::routing {
 
 struct raptor_label {
-  raptor_label() = delete;
-  raptor_label(const raptor_label& other) = default;
+  raptor_label() = default;
   raptor_label(minutes_after_midnight_t arrival,
                minutes_after_midnight_t departure,
                bitfield traffic_day_bitfield_)
@@ -32,4 +31,4 @@ struct raptor_label {
   bitfield traffic_day_bitfield_;
 };
 
-} // namespace nigiri
+} // namespace nigiri::routing
