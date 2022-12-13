@@ -1,6 +1,11 @@
 #pragma once
 
 #include "nigiri/types.h"
+#include "nigiri/routing/pareto_set.h"
+#include "nigiri/routing/journey.h"
+#include "nigiri/footpath.h"
+
+#include <variant>
 
 namespace nigiri::routing {
 
@@ -30,5 +35,7 @@ struct raptor_label {
   minutes_after_midnight_t departure_;
   bitfield traffic_day_bitfield_;
 };
+
+typedef pareto_set<raptor_label> raptor_bag;
 
 } // namespace nigiri::routing

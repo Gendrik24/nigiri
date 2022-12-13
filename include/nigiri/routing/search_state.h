@@ -9,6 +9,8 @@
 #include "nigiri/routing/pareto_set.h"
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/start_times.h"
+#include "nigiri/routing/raptor_label.h"
+
 
 namespace nigiri {
 struct timetable;
@@ -28,6 +30,21 @@ struct search_state {
   std::vector<duration_t> travel_time_lower_bound_;
   std::vector<routing_time> best_;
   cista::raw::matrix<routing_time> round_times_;
+  std::vector<bool> station_mark_;
+  std::vector<bool> prev_station_mark_;
+  std::vector<bool> route_mark_;
+  std::vector<bool> is_destination_;
+  std::vector<start> starts_;
+  std::vector<std::set<location_idx_t>> destinations_;
+  std::vector<pareto_set<journey>> results_;
+  interval<unixtime_t> search_interval_;
+};
+
+struct profile_search_state {
+  void reset(timetable const& tt);
+
+  std::vector<raptor_bag> best_bag_;
+  cista::raw::matrix<raptor_bag> round_bags_;
   std::vector<bool> station_mark_;
   std::vector<bool> prev_station_mark_;
   std::vector<bool> route_mark_;
