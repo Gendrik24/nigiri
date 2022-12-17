@@ -28,15 +28,13 @@ if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         -Wno-c99-designator
         -Wno-zero-as-null-pointer-constant
         -Wno-missing-noreturn
-        -Wno-undefined-func-template
-        -Werror)
+        -Wno-undefined-func-template)
 elseif(MSVC)
   set(nigiri-compile-options /WX)
 else()
   set(nigiri-compile-options ${SORO_COMPILE_OPTIONS}
         -Wall
-        -Wextra
-        -Werror)
+        -Wextra)
 endif()
 
 # --- LIB ---

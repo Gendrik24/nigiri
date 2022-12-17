@@ -4,6 +4,7 @@
 #include "nigiri/routing/pareto_set.h"
 #include "nigiri/routing/journey.h"
 #include "nigiri/footpath.h"
+#include "nigiri/dynamic_bitfield.h"
 
 #include <variant>
 
@@ -13,10 +14,10 @@ struct raptor_label {
   raptor_label() = default;
   raptor_label(minutes_after_midnight_t arrival,
                minutes_after_midnight_t departure,
-               bitfield traffic_day_bitfield_)
+               dynamic_bitfield traffic_day_bitfield)
                 : arrival_(arrival),
                   departure_(departure),
-                  traffic_day_bitfield_(traffic_day_bitfield_){};
+                  traffic_day_bitfield_(traffic_day_bitfield){};
 
   friend bool operator==(const raptor_label& lhs, const raptor_label& rhs) {
     return lhs.arrival_ == rhs.arrival_
@@ -33,9 +34,18 @@ struct raptor_label {
 
   minutes_after_midnight_t arrival_;
   minutes_after_midnight_t departure_;
-  bitfield traffic_day_bitfield_;
+  dynamic_bitfield traffic_day_bitfield_;
+};
+
+struct raptor_route_label : public raptor_label {
+  raptor_route_label(minutes_after_midnight_t arrival,
+                     minutes_after_midnight_t departure,
+                     dynamic_bitfield traffic_day_bitfield,
+                     transport t) : raptor_label(arrival, departure, traffic_day_bitfield), t_{t} {};
+  transport t_;
 };
 
 typedef pareto_set<raptor_label> raptor_bag;
 
+typedef pareto_set<raptor_route_label> route_bag;
 } // namespace nigiri::routing
