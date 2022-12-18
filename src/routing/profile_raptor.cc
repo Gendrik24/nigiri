@@ -1,6 +1,7 @@
 #include "nigiri/routing/profile_raptor.h"
 
 #include <string>
+#include <algorithm>
 
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/start_times.h"
@@ -181,7 +182,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
 
-  route_bag r_b{};
+  raptor_bag r_b{};
   for (auto i = 0U; i != stop_sequence.size(); ++i) {
     auto const stop_idx =
         static_cast<unsigned>(i);
@@ -192,6 +193,10 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     for (auto it = r_b.begin(); it != r_b.end(); ++it) {
       auto& active_label = *it;
 
+      if (active_label.t_.t_idx_ == transport_idx_t::invalid()) {
+        continue;
+      }
+
       const auto new_arr = tt_.event_mam(route_idx,
                                          active_label.t_.t_idx_,
                                          stop_idx,
@@ -201,9 +206,37 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     }
 
     // 2. Merge Route Bag into round bag
+    const auto resp = state_.round_bags_[k][cista::to_idx(l_idx)].merge(r_b);
+    any_marked = std::any_of(resp.begin(),
+                             resp.end(),
+                             [](const auto e){return e.first;});
 
+    // 3. Assign Trips to labels from previous round and merge them into route bag
+    const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
+    for (const auto& l : prev_round) {
+      std::vector<transport> e_transports;
+      get_earliest_sufficient_transports(l, route_idx, stop_idx, e_transports);
+      dynamic_bitfield to_serve = l.traffic_day_bitfield_;
+      auto alr_shifted = size_t{0};
+      for (const auto& transport : e_transports) {
+        to_serve <<= transport.day_.v_ - alr_shifted;
+        alr_shifted += transport.day_.v_ - alr_shifted;
 
+        auto trip_traffic_day_bitfield = dynamic_bitfield{
+            tt_.bitfields_[tt_.transport_traffic_days_[transport.t_idx_]] >> this->start_day_offset().v_,
+            this->number_of_days_in_search_interval().v_
+        };
 
+        r_b.add(raptor_label{
+            l.arrival_,
+            l.departure_,
+            (to_serve & trip_traffic_day_bitfield) >> alr_shifted,
+            transport
+        });
+
+        to_serve &= ~trip_traffic_day_bitfield;
+      }
+    }
   }
 
   return any_marked;
@@ -276,18 +309,6 @@ void profile_raptor::get_earliest_sufficient_transports(const raptor_label label
     td_bitfield <<= 1U;
     day_offset++;
   }
-
-
-
-
-
-
-
-
-
-
-
-
 }
 
 }

@@ -22,6 +22,15 @@ struct raptor_label {
                   departure_(departure),
                   traffic_day_bitfield_(traffic_day_bitfield){};
 
+  raptor_label(minutes_after_midnight_t arrival,
+               minutes_after_midnight_t departure,
+               dynamic_bitfield traffic_day_bitfield,
+               transport t)
+      : arrival_(arrival),
+        departure_(departure),
+        traffic_day_bitfield_(traffic_day_bitfield),
+        t_(t){};
+
   friend bool operator==(const raptor_label& lhs, const raptor_label& rhs) {
     return lhs.arrival_ == rhs.arrival_
            && lhs.departure_ == rhs.departure_
@@ -41,20 +50,16 @@ struct raptor_label {
            && ! (*this == other);
   }
 
+  inline void assign_transport(const transport t) noexcept {
+    this->t_ = t;
+  }
+
   minutes_after_midnight_t arrival_;
   minutes_after_midnight_t departure_;
   dynamic_bitfield traffic_day_bitfield_;
-};
-
-struct raptor_route_label : public raptor_label {
-  raptor_route_label(minutes_after_midnight_t arrival,
-                     minutes_after_midnight_t departure,
-                     dynamic_bitfield traffic_day_bitfield,
-                     transport t) : raptor_label(arrival, departure, traffic_day_bitfield), t_{t} {};
   transport t_;
 };
 
 typedef pareto_set<raptor_label> raptor_bag;
 
-typedef pareto_set<raptor_route_label> route_bag;
 } // namespace nigiri::routing
