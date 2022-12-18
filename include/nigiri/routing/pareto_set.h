@@ -1,5 +1,8 @@
 #pragma once
 
+#include "utl/enumerate.h"
+#include "fmt/core.h"
+
 #include <cinttypes>
 #include <vector>
 
@@ -27,6 +30,34 @@ struct pareto_set {
     els_.resize(els_.size() - n_removed + 1);
     els_.back() = std::move(el);
     return {true, std::next(begin(), static_cast<unsigned>(els_.size() - 1))};
+  }
+
+  std::vector<std::pair<bool, iterator>> merge(const pareto_set<T>& set) {
+    std::vector<std::pair<bool, iterator>> res;
+    for (const auto& el : set) {
+      auto n_removed = std::size_t{0};
+      bool dominated = false;
+      for (auto i = 0U; i < els_.size(); ++i) {
+        if (els_[i].dominates(el)) {
+          res.push_back({false, end()});
+          dominated = true;
+          break;
+        }
+        if (el.dominates(els_[i])) {
+          n_removed++;
+          continue;
+        }
+        els_[i - n_removed] = els_[i];
+      }
+      if (dominated) {
+        continue;
+      }
+      els_.resize(els_.size() - n_removed + 1);
+      els_.back() = std::move(el);
+      res.push_back({true, std::next(begin(), static_cast<unsigned>(els_.size() - 1))});
+    }
+
+    return res;
   }
 
   friend const_iterator begin(pareto_set const& s) { return s.begin(); }

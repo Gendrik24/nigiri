@@ -6,7 +6,10 @@
 #include "nigiri/footpath.h"
 #include "nigiri/dynamic_bitfield.h"
 
+#include "cista/reflection/printable.h"
+
 #include <variant>
+#include <sstream>
 
 namespace nigiri::routing {
 
@@ -23,6 +26,12 @@ struct raptor_label {
     return lhs.arrival_ == rhs.arrival_
            && lhs.departure_ == rhs.departure_
            && lhs.traffic_day_bitfield_ == rhs.traffic_day_bitfield_;
+  }
+
+  std::string to_string() const noexcept {
+    std::stringstream ss;
+    ss << "[arr=" << arrival_ << ", dep=" << departure_ << ", tdb=" << traffic_day_bitfield_.to_string() << "]";
+    return ss.str();
   }
 
   inline bool dominates(const raptor_label& other) const noexcept {
