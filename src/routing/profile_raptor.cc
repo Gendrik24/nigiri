@@ -36,6 +36,20 @@ day_idx_t profile_raptor::number_of_days_in_search_interval() const {
          - tt_.day_idx_mam(this->search_interval_.from_).first + 1;
 }
 
+bool profile_raptor::is_dominated_by_best_bags(const raptor_label& l) {
+  for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
+    if (!state_.is_destination_[to_idx(l_idx)]) {
+      continue;
+    }
+
+    if (!state_.best_bag_[to_idx(l_idx)].dominates(l)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 unsigned profile_raptor::end_k() const {
   return std::min(kMaxTransfers, q_.max_transfers_) + 1U;
 }
@@ -210,10 +224,17 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     }
 
     // 2. Merge Route Bag into round bag
-    const auto resp = state_.round_bags_[k][cista::to_idx(l_idx)].merge(r_b);
-    any_marked = std::any_of(resp.begin(),
-                             resp.end(),
-                             [](const auto e){return e.first;});
+    for (const auto& rl : r_b) {
+      if (!state_.is_destination_[l_idx] && is_dominated_by_best_bags(rl)) {
+        continue;
+      }
+
+      raptor_bag& best_bag_of_stop = state_.best_bag_[l_idx];
+      if (best_bag_of_stop.add(rl).first) {
+        state_.round_bags_[k][cista::to_idx(l_idx)].add(rl);
+        any_marked = true;
+      }
+    }
     if (any_marked) {
       state_.station_mark_[l_idx] = true;
     }

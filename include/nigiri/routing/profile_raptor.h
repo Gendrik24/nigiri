@@ -21,6 +21,7 @@ struct profile_raptor {
   void init_starts();
   void route();
   void rounds();
+  bool is_dominated_by_best_bags(const raptor_label& l);
 
   bool update_route(unsigned const k, route_idx_t route);
   void update_footpaths(unsigned const k);
