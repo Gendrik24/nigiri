@@ -203,7 +203,8 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
                                          event_type::kArr) + minutes_after_midnight_t{active_label.t_.day_.v_ * 1440};
 
       auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
-      auto const new_arr_with_transfer = new_arr + transfer_time_offset;
+      auto const is_destination = state_.is_destination_[l_idx];
+      auto const new_arr_with_transfer = new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset);
 
       active_label.arrival_ = new_arr_with_transfer;
     }

@@ -17,6 +17,7 @@
 #include "nigiri/routing/start_times.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/timetable.h"
+#include "nigiri/tracer.h"
 
 #define NIGIRI_LOWER_BOUND
 
@@ -25,25 +26,6 @@
 #define NIGIRI_COUNT(s) ++stats_.s
 #else
 #define NIGIRI_COUNT(s)
-#endif
-
-// #define NIGIRI_RAPTOR_TRACING
-// #define NIGIRI_RAPTOR_TRACING_ONLY_UPDATES
-
-#ifdef NIGIRI_RAPTOR_TRACING
-
-#ifdef NIGIRI_RAPTOR_TRACING_ONLY_UPDATES
-#define trace(...)
-#else
-#define trace(...) fmt::print(__VA_ARGS__)
-#endif
-
-#define trace_always(...) fmt::print(__VA_ARGS__)
-#define trace_upd(...) fmt::print(__VA_ARGS__)
-#else
-#define trace(...)
-#define trace_always(...)
-#define trace_upd(...)
 #endif
 
 namespace nigiri::routing {
