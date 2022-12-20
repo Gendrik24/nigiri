@@ -202,7 +202,10 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
                                          stop_idx,
                                          event_type::kArr) + minutes_after_midnight_t{active_label.t_.day_.v_ * 1440};
 
-      active_label.arrival_ = new_arr;
+      auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
+      auto const new_arr_with_transfer = new_arr + transfer_time_offset;
+
+      active_label.arrival_ = new_arr_with_transfer;
     }
 
     // 2. Merge Route Bag into round bag
@@ -210,6 +213,9 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     any_marked = std::any_of(resp.begin(),
                              resp.end(),
                              [](const auto e){return e.first;});
+    if (any_marked) {
+      state_.station_mark_[l_idx] = true;
+    }
 
     // 3. Assign Trips to labels from previous round and merge them into route bag
     const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
@@ -244,6 +250,30 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
 
 void profile_raptor::update_footpaths(unsigned const k) {
+
+  for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
+    if (!state_.station_mark_[to_idx(l_idx)]) {
+      continue;
+    }
+
+    auto round_bag_copy = state_.round_bags_[k][to_idx(l_idx)];
+
+    auto const fps = tt_.locations_.footpaths_out_[l_idx];
+
+    for (auto const& fp : fps) {
+      auto const target = to_idx(fp.target_);
+      auto const fp_offset = fp.duration_ - tt_.locations_.transfer_time_[l_idx];
+
+      for (auto it = round_bag_copy.begin(); it != round_bag_copy.end(); ++it) {
+        (*it).arrival_ += fp_offset;
+      }
+      const auto res = state_.round_bags_[k][target].merge(round_bag_copy);
+      if (std::any_of(res.begin(), res.end(), [](const auto e){return e.first;})) {
+        state_.station_mark_[target] = true;
+      }
+
+    }
+  }
 
 }
 
@@ -288,6 +318,7 @@ void profile_raptor::get_earliest_sufficient_transports(const raptor_label label
           tt_.bitfields_[tt_.transport_traffic_days_[t]] >> this->start_day_offset().v_,
           this->number_of_days_in_search_interval().v_
         };
+
 
         if (!trip_traffic_day_bitfield.any()) continue;
 
