@@ -14,6 +14,8 @@ struct timetable;
 
 namespace nigiri::routing {
 
+using dep_arr_t = std::pair<routing_time, routing_time>;
+
 struct profile_search_state;
 
 struct profile_raptor {
@@ -31,9 +33,18 @@ struct profile_raptor {
                                           unsigned const stop_idx,
                                           std::vector<transport>& transports);
 
+  void force_print_state(char const* comment = "");
+  void print_state(char const* comment = "");
+
   day_idx_t start_day_offset() const;
   day_idx_t number_of_days_in_search_interval() const;
   unsigned end_k() const;
+
+  void reconstruct();
+  void reconstruct_for_destination(std::size_t dest_idx,
+                                   location_idx_t dest,
+                                   search_state& state,
+                                   const unixtime_t start_at_start);
 
   timetable const& tt_;
   std::uint16_t n_tt_days_;

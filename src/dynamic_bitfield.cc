@@ -20,6 +20,14 @@ bool dynamic_bitfield::any() const noexcept {
   return b_.any();
 }
 
+std::size_t dynamic_bitfield::size() const noexcept {
+  return this->size_;
+}
+
+bool dynamic_bitfield::operator[](std::size_t i) const noexcept {
+  return b_.test(i);
+}
+
 bool operator==(dynamic_bitfield const& a, dynamic_bitfield const& b) noexcept {
   return a.b_ == b.b_ && a.size_ == b.size_;
 }

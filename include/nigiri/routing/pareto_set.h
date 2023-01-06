@@ -81,7 +81,7 @@ struct pareto_set {
   }
   void clear() { els_.clear(); }
 
-private:
+protected:
   std::vector<T> els_;
 };
 

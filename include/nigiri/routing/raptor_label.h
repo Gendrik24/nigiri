@@ -5,6 +5,8 @@
 #include "nigiri/routing/journey.h"
 #include "nigiri/footpath.h"
 #include "nigiri/dynamic_bitfield.h"
+#include "nigiri/timetable.h"
+#include "nigiri/routing/routing_time.h"
 
 #include "cista/reflection/printable.h"
 
@@ -48,6 +50,27 @@ struct raptor_label {
            && departure_ >= other.departure_
            && (traffic_day_bitfield_ | other.traffic_day_bitfield_) == traffic_day_bitfield_
            && ! (*this == other);
+  }
+
+  std::vector<std::pair<routing_time, routing_time>> resolve_label(const uint32_t day_offset) const noexcept {
+    std::vector<std::pair<routing_time, routing_time>> res;
+    auto tdb = traffic_day_bitfield_;
+    for (std::size_t i = 0U; i < tdb.size(); ++i) {
+      if (!tdb.any()) {
+        break;
+      }
+      if (tdb[0U]) {
+        const day_idx_t base{day_offset + i};
+        res.push_back({
+            routing_time(base, departure_),
+            routing_time(base, arrival_)
+        });
+      }
+
+      tdb >>= 1U;
+    }
+
+    return res;
   }
 
   inline void assign_transport(const transport t) noexcept {

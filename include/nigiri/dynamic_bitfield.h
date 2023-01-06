@@ -14,6 +14,8 @@ struct dynamic_bitfield {
   dynamic_bitfield(std::string_view s, std::size_t size);
 
   bool any() const noexcept;
+  std::size_t size() const noexcept;
+  bool operator[](std::size_t i) const noexcept;
 
   friend bool operator==(dynamic_bitfield const& a, dynamic_bitfield const& b) noexcept;
 

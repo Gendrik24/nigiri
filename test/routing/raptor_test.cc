@@ -2,8 +2,12 @@
 
 #include "nigiri/loader/hrd/load_timetable.h"
 #include "nigiri/routing/raptor.h"
+#include "nigiri/routing/profile_raptor.h"
+#include "nigiri/routing/raptor_label.h"
 
 #include "nigiri/routing/search_state.h"
+
+#include "cista/containers/matrix.h"
 
 #include "../loader/hrd/hrd_timetable.h"
 
@@ -52,31 +56,51 @@ TEST_CASE("raptor-forward") {
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
   auto state = routing::search_state{};
 
+  routing::query q{
+    .start_time_ =
+        interval<unixtime_t>{
+            unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
+            unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
+    .start_match_mode_ = nigiri::routing::location_match_mode::kExact,
+    .dest_match_mode_ = nigiri::routing::location_match_mode::kExact,
+    .use_start_footpaths_ = true,
+    .start_ = {nigiri::routing::offset{
+        tt.locations_.location_id_to_idx_.at(
+            {.id_ = "0000001", .src_ = src}),
+        0_minutes, 0U}},
+    .destinations_ = {{nigiri::routing::offset{
+        tt.locations_.location_id_to_idx_.at(
+            {.id_ = "0000003", .src_ = src}),
+        0_minutes, 0U}}},
+    .via_destinations_ = {},
+    .allowed_classes_ = bitset<kNumClasses>::max(),
+    .max_transfers_ = 6U,
+    .min_connection_count_ = 0U,
+    .extend_interval_earlier_ = false,
+    .extend_interval_later_ = false};
+
   auto fwd_r = routing::raptor<direction::kForward, false>{
-      tt, state,
-      routing::query{
-          .start_time_ =
-              interval<unixtime_t>{
-                  unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
-                  unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
-          .start_match_mode_ = nigiri::routing::location_match_mode::kExact,
-          .dest_match_mode_ = nigiri::routing::location_match_mode::kExact,
-          .use_start_footpaths_ = true,
-          .start_ = {nigiri::routing::offset{
-              tt.locations_.location_id_to_idx_.at(
-                  {.id_ = "0000001", .src_ = src}),
-              0_minutes, 0U}},
-          .destinations_ = {{nigiri::routing::offset{
-              tt.locations_.location_id_to_idx_.at(
-                  {.id_ = "0000003", .src_ = src}),
-              0_minutes, 0U}}},
-          .via_destinations_ = {},
-          .allowed_classes_ = bitset<kNumClasses>::max(),
-          .max_transfers_ = 6U,
-          .min_connection_count_ = 0U,
-          .extend_interval_earlier_ = false,
-          .extend_interval_later_ = false}};
+      tt, state, q
+  };
   fwd_r.route();
+
+  for (auto const& x : state.results_.at(0)) {
+    std::stringstream ss;
+    for (auto const& [i, l] : utl::enumerate(x.legs_)) {
+      ss << "leg " << i << ":\n";
+      ss << "From: " << l.from_ <<  " at: " << l.dep_time_ << ", to: " << l.to_ << " at " << l.arr_time_ << " -> uses " << std::visit([](auto&& arg) {
+        using T = std::decay_t< decltype((arg))>;
+        if constexpr (std::is_same_v<T,nigiri::routing::journey::transport_enter_exit>) {
+          return "transport";
+        } else if constexpr (std::is_same_v<T, nigiri::footpath>) {
+          return "footpath";
+        } else if constexpr (std::is_same_v<T, nigiri::routing::offset>) {
+          return "offset";
+        }
+      }, l.uses_) << "\n";
+    }
+    fmt::print("{}", ss.str());
+  }
 
   std::stringstream ss;
   ss << "\n";

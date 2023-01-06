@@ -3,8 +3,11 @@
 #include "nigiri/loader/hrd/load_timetable.h"
 #include "nigiri/routing/profile_raptor.h"
 #include "nigiri/routing/raptor_label.h"
-
 #include "nigiri/routing/search_state.h"
+#include "nigiri/routing/routing_time.h"
+#include "nigiri/routing/sorted_pareto_set.h"
+#include "nigiri/routing/raptor_label.h"
+
 #include "nigiri/timetable.h"
 #include "nigiri/dynamic_bitfield.h"
 
@@ -13,6 +16,7 @@
 #include "../loader/hrd/hrd_timetable.h"
 
 using namespace nigiri;
+using namespace nigiri::routing;
 using namespace nigiri::test_data::hrd_timetable;
 
 constexpr auto const fwd_journeys = R"(
@@ -60,7 +64,7 @@ TEST_CASE("profile-raptor") {
   routing::query q{
       .start_time_ =
           interval<unixtime_t>{
-              unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
+              unixtime_t{sys_days{2020_y / March / 28}} + 5_hours,
               unixtime_t{sys_days{2020_y / April / 1}} + 6_hours},
       .start_match_mode_ = nigiri::routing::location_match_mode::kExact,
       .dest_match_mode_ = nigiri::routing::location_match_mode::kExact,
@@ -83,22 +87,17 @@ TEST_CASE("profile-raptor") {
   auto fwdp_r = routing::profile_raptor{
       tt, profile_state, q
   };
+  fwdp_r.route();
+  fwdp_r.reconstruct();
 
-
-  for (auto r_id = 0U; r_id != tt.n_routes(); ++r_id) {
-    const auto r = route_idx_t{r_id};
-    auto const n_transports =
-        static_cast<unsigned>(tt.route_transport_ranges_[r].size());
-
-    auto const stop_sequence = tt.route_location_seq_[r];
-    fmt::print("Route {}, {} transports, {} stops\n", r, n_transports, stop_sequence.size());
-    const auto interval = tt.route_stop_time_ranges_.at(r);
-    for (auto i = interval.from_; i!=interval.to_; ++i) {
-      fmt::print("\tStop Time {}\n", tt.route_stop_times_[i]);
-    }
+  fmt::print("Found {} journeys\n", fwdp_r.state_.results_[0].size());
+  std::stringstream ss;
+  ss << "\n";
+  for (auto const& x : fwdp_r.state_.results_.at(0)) {
+    x.print(ss, tt);
+    ss << "\n\n";
   }
-  const routing::raptor_label l{minutes_after_midnight_t(120), minutes_after_midnight_t(60), dynamic_bitfield("111", 3)};
-  std::vector<transport> v;
-  fwdp_r.get_earliest_sufficient_transports(l, route_idx_t{0}, 0, v);
+  fmt::print("{}", ss.str());
+
   CHECK(true);
 };

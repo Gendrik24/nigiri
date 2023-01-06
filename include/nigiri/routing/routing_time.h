@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "nigiri/timetable.h"
 #include "nigiri/types.h"
 
@@ -56,6 +58,16 @@ struct routing_time {
     } else {
       return out << i32_minutes{t.t()};
     }
+  }
+
+  std::string to_string() const {
+    std::stringstream ss;
+    const auto num_days = offset_ / 1440;
+    if (num_days > 0) {
+      ss << num_days << "d ";
+    }
+    ss << i32_minutes{offset_ % 1440};
+    return ss.str();
   }
   std::int32_t offset_;  // minutes since timetable begin
 };
