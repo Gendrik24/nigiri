@@ -60,6 +60,7 @@ TEST_CASE("profile-raptor") {
   auto const src = source_idx_t{0U};
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
   auto profile_state = routing::profile_search_state{};
+  auto state = routing::search_state{};
 
   routing::query q{
       .start_time_ =
@@ -88,16 +89,25 @@ TEST_CASE("profile-raptor") {
       tt, profile_state, q
   };
   fwdp_r.route();
-  fwdp_r.reconstruct();
 
-  fmt::print("Found {} journeys\n", fwdp_r.state_.results_[0].size());
+  std::stringstream ss_profile;
+  ss_profile << "\n";
+  for (auto const& x : fwdp_r.state_.results_.at(0)) {
+    x.print(ss_profile, tt);
+    ss_profile << "\n\n";
+  }
+
+  auto fwd_r = routing::raptor<direction::kForward, false>{
+      tt, state, q
+  };
+  fwd_r.route();
+
   std::stringstream ss;
   ss << "\n";
-  for (auto const& x : fwdp_r.state_.results_.at(0)) {
+  for (auto const& x : state.results_.at(0)) {
     x.print(ss, tt);
     ss << "\n\n";
   }
-  fmt::print("{}", ss.str());
 
-  CHECK(true);
+  CHECK_EQ(ss.str(), ss_profile.str());
 };

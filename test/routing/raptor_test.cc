@@ -84,24 +84,6 @@ TEST_CASE("raptor-forward") {
   };
   fwd_r.route();
 
-  for (auto const& x : state.results_.at(0)) {
-    std::stringstream ss;
-    for (auto const& [i, l] : utl::enumerate(x.legs_)) {
-      ss << "leg " << i << ":\n";
-      ss << "From: " << l.from_ <<  " at: " << l.dep_time_ << ", to: " << l.to_ << " at " << l.arr_time_ << " -> uses " << std::visit([](auto&& arg) {
-        using T = std::decay_t< decltype((arg))>;
-        if constexpr (std::is_same_v<T,nigiri::routing::journey::transport_enter_exit>) {
-          return "transport";
-        } else if constexpr (std::is_same_v<T, nigiri::footpath>) {
-          return "footpath";
-        } else if constexpr (std::is_same_v<T, nigiri::routing::offset>) {
-          return "offset";
-        }
-      }, l.uses_) << "\n";
-    }
-    fmt::print("{}", ss.str());
-  }
-
   std::stringstream ss;
   ss << "\n";
   for (auto const& x : state.results_.at(0)) {

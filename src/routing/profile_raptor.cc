@@ -155,6 +155,7 @@ void profile_raptor::route() {
                        state_.destinations_, state_.is_destination_);
   init_starts();
   rounds();
+  reconstruct();
 }
 
 void profile_raptor::rounds() {
@@ -559,7 +560,7 @@ void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
         .transfers_ = static_cast<std::uint8_t>(k - 1)});
     if (optimal) {
         try {
-          reconstruct_journey<direction::kForward>(tt_, q_, state, *it);
+          reconstruct_journey<direction::kForward>(tt_, q_, *it, state.best_, state.round_times_);
         } catch (std::exception const& e) {
           state.results_[dest_idx].erase(it);
           log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());

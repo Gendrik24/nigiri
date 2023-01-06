@@ -1,6 +1,7 @@
 #pragma once
 
 #include "nigiri/types.h"
+#include "nigiri/routing/routing_time.h"
 
 namespace nigiri {
 struct timetable;
@@ -15,7 +16,8 @@ struct journey;
 template <direction SearchDir>
 void reconstruct_journey(timetable const&,
                          query const&,
-                         search_state const&,
-                         journey&);
+                         journey&,
+                         std::vector<routing_time> const&,
+                         cista::raw::matrix<routing_time> const&);
 
 }  // namespace nigiri::routing

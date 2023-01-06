@@ -719,7 +719,7 @@ void raptor<SearchDir, IntermodalTarget>::reconstruct_for_destination(
           !q_.start_time_.as<interval<unixtime_t>>().contains(it->start_time_);
       if (!outside_interval) {
         try {
-          reconstruct_journey<SearchDir>(tt_, q_, state_, *it);
+          reconstruct_journey<SearchDir>(tt_, q_, *it, state_.best_, state_.round_times_);
         } catch (std::exception const& e) {
           state_.results_[dest_index].erase(it);
           log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
