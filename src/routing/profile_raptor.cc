@@ -464,17 +464,27 @@ void profile_raptor::reconstruct() {
   matrix<std::vector<dep_arr_t>> expanded_round_times =
       cista::raw::make_matrix<std::vector<dep_arr_t>>(r_max, tt_.n_locations());
 
-  matrix<std::vector<dep_arr_t>::iterator> round_time_iter =
+  matrix<std::vector<dep_arr_t>::iterator> curr_dep_time_iter =
       cista::raw::make_matrix<std::vector<dep_arr_t>::iterator>(r_max, tt_.n_locations());
 
   const auto dep_arr_cmp = [](const dep_arr_t& el1, const dep_arr_t& el2) {
+    // First sort from latest departure to earliest departure
     if (el1.first > el2.first) {
       return true;
     } else if (el1.first < el2.first) {
       return false;
     }
 
+    // If same departure sort from earliest arrival to latest
     if (el1.second < el2.second) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const auto dep_cmp = [](const routing_time& rt1, const routing_time& rt2) {
+    if (rt1 > rt2) {
       return true;
     }
 
@@ -486,27 +496,19 @@ void profile_raptor::reconstruct() {
       const auto& bag = state_.round_bags_[r][l];
       auto& ert = expanded_round_times[r][l];
 
-      for (auto it = bag.begin(); it != bag.end(); it++) {
-        const auto& resolved = it->resolve_label(to_idx(start_day_offset()));
+      for (const auto& label : bag) {
+        const auto& resolved = label.resolve_label(to_idx(start_day_offset()));
         ert.insert(ert.end(), resolved.begin(), resolved.end());
       }
 
       //1.sort round times here
       std::sort(ert.begin(), ert.end(), dep_arr_cmp);
       //2.Initialize iterator to first element
-      round_time_iter[r][l] = ert.begin();
+      curr_dep_time_iter[r][l] = ert.begin();
     }
   }
 
-  const auto dep_time_cmp = [](const routing_time& rt1, const routing_time& rt2) {
-    if (rt1 > rt2) {
-      return true;
-    }
-
-    return false;
-  };
-
-  std::set<routing_time, decltype(dep_time_cmp)> dep_times(dep_time_cmp);
+  std::set<routing_time, decltype(dep_cmp)> dep_times(dep_cmp);
   for (auto l = 0U; l < tt_.n_locations(); ++l) {
     const auto& dep_arr_times = expanded_round_times[0][l];
     for (const auto& dat : dep_arr_times) {
@@ -514,55 +516,68 @@ void profile_raptor::reconstruct() {
     }
   }
 
+  std::vector<routing_time> best_times(tt_.n_locations(), kInvalidTime<direction::kForward>);
+
+  cista::raw::matrix<routing_time> round_times =
+      cista::raw::make_matrix<routing_time>(
+          kMaxTransfers + 1U,
+          tt_.n_locations(),
+          kInvalidTime<direction::kForward>);
+
   for (const auto& dep_time : dep_times) {
-    search_state ss;
-    ss.reset(tt_, kInvalidTime<direction::kForward>);
 
     for (auto r = 0U; r < r_max; ++r) {
       for (auto l = 0U; l < tt_.n_locations(); ++l) {
-        auto& iter = round_time_iter[r][l];
+        auto& iter = curr_dep_time_iter[r][l];
 
         while (iter != expanded_round_times[r][l].end() && iter->first > dep_time) {
           iter++;
         }
 
         if (iter != expanded_round_times[r][l].end() && iter->first == dep_time) {
-          ss.round_times_[r][l] = iter->second;
+          round_times[r][l] = iter->second;
         }
       }
     }
-    ss.results_.resize(
-        std::max(state_.results_.size(), state_.destinations_.size()));
     for (auto const [i, t] : utl::enumerate(q_.destinations_)) {
       for (auto const dest : state_.destinations_[i]) {
-        reconstruct_for_destination( i, dest, ss, dep_time.to_unixtime(tt_));
+        reconstruct_for_destination(
+            i,
+            dest,
+            best_times,
+            round_times,
+            dep_time.to_unixtime(tt_),
+            state_.results_);
       }
-
-      state_.results_[i].merge(ss.results_[i]);
     }
+
+    std::fill(begin(best_times), end(best_times), kInvalidTime<direction::kForward>);
+    round_times.reset(kInvalidTime<direction::kForward>);
   }
 }
 
 
 void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
                                                  location_idx_t dest,
-                                                 search_state& state,
-                                                 const unixtime_t start_at_start) {
+                                                 std::vector<routing_time> const& best_times,
+                                                 cista::raw::matrix<routing_time> const& round_times,
+                                                 const unixtime_t start_at_start,
+                                                 std::vector<pareto_set<journey>>& results) {
   for (auto k = 1U; k != end_k(); ++k) {
-    if (state.round_times_[k][to_idx(dest)] == kInvalidTime<direction::kForward>) {
+    if (round_times[k][to_idx(dest)] == kInvalidTime<direction::kForward>) {
       continue;
     }
-    auto const [optimal, it] = state.results_[dest_idx].add(journey{
+    auto const [optimal, it] = results[dest_idx].add(journey{
         .legs_ = {},
         .start_time_ = start_at_start,
-        .dest_time_ = state.round_times_[k][to_idx(dest)].to_unixtime(tt_),
+        .dest_time_ = round_times[k][to_idx(dest)].to_unixtime(tt_),
         .dest_ = dest,
         .transfers_ = static_cast<std::uint8_t>(k - 1)});
     if (optimal) {
         try {
-          reconstruct_journey<direction::kForward>(tt_, q_, *it, state.best_, state.round_times_);
+          reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
         } catch (std::exception const& e) {
-          state.results_[dest_idx].erase(it);
+          results[dest_idx].erase(it);
           log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
           print_state("RECONSTRUCT FAILED");
         }
