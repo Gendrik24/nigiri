@@ -573,14 +573,16 @@ void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
         .dest_time_ = round_times[k][to_idx(dest)].to_unixtime(tt_),
         .dest_ = dest,
         .transfers_ = static_cast<std::uint8_t>(k - 1)});
-    if (optimal) {
-        try {
-          reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
-        } catch (std::exception const& e) {
-          results[dest_idx].erase(it);
-          log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
-          print_state("RECONSTRUCT FAILED");
-        }
+    if (optimal &&
+        search_interval_.contains(it->start_time_) &&
+        search_interval_.contains(it->dest_time_)) {
+          try {
+            reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
+          } catch (std::exception const& e) {
+            results[dest_idx].erase(it);
+            log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
+            print_state("RECONSTRUCT FAILED");
+          }
     }
   }
 }
