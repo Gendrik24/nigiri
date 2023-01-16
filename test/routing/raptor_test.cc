@@ -7,7 +7,7 @@
 
 #include "nigiri/routing/search_state.h"
 
-#include "cista/containers/matrix.h"
+#include "cista/containers/flat_matrix.h"
 
 #include "../loader/hrd/hrd_timetable.h"
 

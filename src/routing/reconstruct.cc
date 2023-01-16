@@ -30,7 +30,7 @@ template <direction SearchDir>
 std::optional<journey::leg> find_start_footpath(timetable const& tt,
                                                 query const& q,
                                                 journey const& j,
-                                                cista::raw::matrix<routing_time> const& round_times) {
+                                                matrix<routing_time> const& round_times) {
   trace("find_start_footpath()\n");
 
   constexpr auto const kFwd = SearchDir == direction::kForward;
@@ -166,7 +166,7 @@ void reconstruct_journey(timetable const& tt,
                          query const& q,
                          journey& j,
                          std::vector<routing_time> const& best_times,
-                         cista::raw::matrix<routing_time> const& round_times) {
+                         matrix<routing_time> const& round_times) {
   (void)q;  // TODO(felix) support intermodal start
 
   constexpr auto const kFwd = SearchDir == direction::kForward;
@@ -459,10 +459,10 @@ void reconstruct_journey(timetable const& tt,
 
 template void reconstruct_journey<direction::kForward>(
     timetable const& tt, query const& q, journey& j,
-      std::vector<routing_time> const& best_times, cista::raw::matrix<routing_time> const& round_times);
+      std::vector<routing_time> const& best_times, matrix<routing_time> const& round_times);
 
 template void reconstruct_journey<direction::kBackward>(
     timetable const& tt, query const& q, journey& j,
-      std::vector<routing_time> const& best_times, cista::raw::matrix<routing_time> const& round_times);
+      std::vector<routing_time> const& best_times, matrix<routing_time> const& round_times);
 
 }  // namespace nigiri::routing

@@ -64,7 +64,7 @@ void init_location_with_offset(timetable const& tt,
                                minutes_after_midnight_t time_to_arrive,
                                location_idx_t location,
                                day_idx_t n_days_in_search_interval,
-                               cista::raw::matrix<raptor_bag>& round_bags_,
+                               matrix<raptor_bag>& round_bags_,
                                std::vector<bool>& station_mark,
                                std::vector<raptor_bag>& best_bags) {
   for (auto const& r : tt.location_routes_.at(location)) {
@@ -327,6 +327,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
       for (auto it = round_bag_copy.begin(); it != round_bag_copy.end(); ++it) {
         (*it).arrival_ += fp_offset;
       }
+
       const auto res = state_.round_bags_[k][target].merge(round_bag_copy);
       if (std::any_of(res.begin(), res.end(), [](const auto e){return e.first;})) {
         state_.station_mark_[target] = true;
@@ -462,10 +463,10 @@ void profile_raptor::reconstruct() {
 
   const auto r_max = kMaxTransfers + 1;
   matrix<std::vector<dep_arr_t>> expanded_round_times =
-      cista::raw::make_matrix<std::vector<dep_arr_t>>(r_max, tt_.n_locations());
+      make_flat_matrix<std::vector<dep_arr_t>>(r_max, tt_.n_locations());
 
   matrix<std::vector<dep_arr_t>::iterator> curr_dep_time_iter =
-      cista::raw::make_matrix<std::vector<dep_arr_t>::iterator>(r_max, tt_.n_locations());
+      make_flat_matrix<std::vector<dep_arr_t>::iterator>(r_max, tt_.n_locations());
 
   const auto dep_arr_cmp = [](const dep_arr_t& el1, const dep_arr_t& el2) {
     // First sort from latest departure to earliest departure
@@ -518,8 +519,8 @@ void profile_raptor::reconstruct() {
 
   std::vector<routing_time> best_times(tt_.n_locations(), kInvalidTime<direction::kForward>);
 
-  cista::raw::matrix<routing_time> round_times =
-      cista::raw::make_matrix<routing_time>(
+  matrix<routing_time> round_times =
+      make_flat_matrix<routing_time>(
           kMaxTransfers + 1U,
           tt_.n_locations(),
           kInvalidTime<direction::kForward>);
@@ -560,7 +561,7 @@ void profile_raptor::reconstruct() {
 void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
                                                  location_idx_t dest,
                                                  std::vector<routing_time> const& best_times,
-                                                 cista::raw::matrix<routing_time> const& round_times,
+                                                 matrix<routing_time> const& round_times,
                                                  const unixtime_t start_at_start,
                                                  std::vector<pareto_set<journey>>& results) {
   for (auto k = 1U; k != end_k(); ++k) {

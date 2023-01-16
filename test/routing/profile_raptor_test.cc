@@ -5,7 +5,6 @@
 #include "nigiri/routing/raptor_label.h"
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/routing_time.h"
-#include "nigiri/routing/sorted_pareto_set.h"
 #include "nigiri/routing/raptor_label.h"
 
 #include "nigiri/timetable.h"

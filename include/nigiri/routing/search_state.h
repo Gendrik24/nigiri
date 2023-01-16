@@ -3,13 +3,14 @@
 #include <set>
 #include <vector>
 
-#include "cista/containers/matrix.h"
+#include "cista/containers/flat_matrix.h"
 
 #include "nigiri/routing/journey.h"
 #include "nigiri/routing/pareto_set.h"
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/start_times.h"
 #include "nigiri/routing/raptor_label.h"
+#include "nigiri/types.h"
 
 
 namespace nigiri {
@@ -29,7 +30,7 @@ struct search_state {
 
   std::vector<duration_t> travel_time_lower_bound_;
   std::vector<routing_time> best_;
-  cista::raw::matrix<routing_time> round_times_;
+  matrix<routing_time> round_times_;
   std::vector<bool> station_mark_;
   std::vector<bool> prev_station_mark_;
   std::vector<bool> route_mark_;
@@ -44,7 +45,7 @@ struct profile_search_state {
   void reset(timetable const& tt);
 
   std::vector<raptor_bag> best_bag_;
-  cista::raw::matrix<raptor_bag> round_bags_;
+  matrix<raptor_bag> round_bags_;
   std::vector<bool> station_mark_;
   std::vector<bool> prev_station_mark_;
   std::vector<bool> route_mark_;

@@ -2,6 +2,7 @@
 
 #include "nigiri/types.h"
 #include "nigiri/routing/routing_time.h"
+#include "nigiri/types.h"
 
 namespace nigiri {
 struct timetable;
@@ -18,6 +19,6 @@ void reconstruct_journey(timetable const&,
                          query const&,
                          journey&,
                          std::vector<routing_time> const&,
-                         cista::raw::matrix<routing_time> const&);
+                         matrix<routing_time> const&);
 
 }  // namespace nigiri::routing

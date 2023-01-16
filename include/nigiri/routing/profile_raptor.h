@@ -44,7 +44,7 @@ struct profile_raptor {
   void reconstruct_for_destination(std::size_t dest_idx,
                                    location_idx_t dest,
                                    std::vector<routing_time> const& best_times,
-                                   cista::raw::matrix<routing_time> const& round_times,
+                                   matrix<routing_time> const& round_times,
                                    const unixtime_t start_at_start,
                                    std::vector<pareto_set<journey>>& results);
 
