@@ -27,7 +27,7 @@ struct raptor_label {
   raptor_label(minutes_after_midnight_t arrival,
                minutes_after_midnight_t departure,
                dynamic_bitfield traffic_day_bitfield,
-               transport t)
+               relative_transport t)
       : arrival_(arrival),
         departure_(departure),
         traffic_day_bitfield_(traffic_day_bitfield),
@@ -48,8 +48,7 @@ struct raptor_label {
   inline bool dominates(const raptor_label& other) const noexcept {
     return arrival_ <= other.arrival_
            && departure_ >= other.departure_
-           && (traffic_day_bitfield_ | other.traffic_day_bitfield_) == traffic_day_bitfield_
-           && ! (*this == other);
+           && (traffic_day_bitfield_ | other.traffic_day_bitfield_) == traffic_day_bitfield_;
   }
 
   std::vector<std::pair<routing_time, routing_time>> resolve_label(const uint32_t day_offset) const noexcept {
@@ -73,14 +72,14 @@ struct raptor_label {
     return res;
   }
 
-  inline void assign_transport(const transport t) noexcept {
+  inline void assign_transport(const relative_transport t) noexcept {
     this->t_ = t;
   }
 
   minutes_after_midnight_t arrival_;
   minutes_after_midnight_t departure_;
   dynamic_bitfield traffic_day_bitfield_;
-  transport t_;
+  relative_transport t_;
 };
 
 typedef pareto_set<raptor_label> raptor_bag;

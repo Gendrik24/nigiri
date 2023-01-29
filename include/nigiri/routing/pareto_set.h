@@ -32,6 +32,10 @@ struct pareto_set {
     return {true, std::next(begin(), static_cast<unsigned>(els_.size() - 1))};
   }
 
+  void add_unchecked(const T& el) {
+    els_.push_back(el);
+  }
+
   bool dominates(const T& el) {
     for (const auto& l : els_) {
       if (l.dominates(el)) return true;

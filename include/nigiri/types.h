@@ -93,6 +93,7 @@ using transport_idx_t = cista::strong<std::uint32_t, struct _transport_idx>;
 using rt_trip_idx_t = cista::strong<std::uint32_t, struct _rt_trip_idx>;
 using source_idx_t = cista::strong<std::uint8_t, struct _source_idx>;
 using day_idx_t = cista::strong<std::uint16_t, struct _day_idx>;
+using relative_day_idx_t = cista::strong<std::int16_t, struct _relative_day_idx>;
 using timezone_idx_t = cista::strong<std::uint8_t, struct _timezone_idx>;
 using merged_trips_idx_t =
     cista::strong<std::uint32_t, struct _merged_trips_idx>;
@@ -150,6 +151,13 @@ struct transport {
   constexpr bool is_valid() const { return day_ != day_idx_t::invalid(); }
   transport_idx_t t_idx_{transport_idx_t::invalid()};
   day_idx_t day_{day_idx_t::invalid()};
+};
+
+struct relative_transport {
+  CISTA_PRINTABLE(relative_transport, "idx", "day")
+  constexpr bool is_valid() const { return day_ != relative_day_idx_t::invalid(); }
+  transport_idx_t t_idx_{transport_idx_t::invalid()};
+  relative_day_idx_t day_{relative_day_idx_t::invalid()};
 };
 
 using i32_minutes = std::chrono::duration<std::int32_t, std::ratio<60>>;

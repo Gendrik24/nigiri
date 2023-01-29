@@ -21,6 +21,13 @@ struct profile_search_state;
 struct profile_raptor {
   profile_raptor(timetable const& tt, profile_search_state& state, query q);
   void init_starts();
+  void init_location_with_offset(timetable const& tt,
+                                 minutes_after_midnight_t time_to_arrive,
+                                 location_idx_t location,
+                                 day_idx_t n_days_in_search_interval,
+                                 matrix<raptor_bag>& round_bags_,
+                                 std::vector<bool>& station_mark,
+                                 std::vector<raptor_bag>& best_bags);
   void route();
   void rounds();
   bool is_dominated_by_best_bags(const raptor_label& l);
@@ -31,7 +38,7 @@ struct profile_raptor {
   void get_earliest_sufficient_transports(const raptor_label label,
                                           route_idx_t const r,
                                           unsigned const stop_idx,
-                                          std::vector<transport>& transports);
+                                          pareto_set<raptor_label>& bag);
 
   void force_print_state(char const* comment = "");
   void print_state(char const* comment = "");

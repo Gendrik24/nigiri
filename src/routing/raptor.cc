@@ -19,7 +19,7 @@
 #include "nigiri/timetable.h"
 #include "nigiri/tracer.h"
 
-#define NIGIRI_LOWER_BOUND
+//#define NIGIRI_LOWER_BOUND
 
 #define NIGIRI_RAPTOR_COUNTING
 #ifdef NIGIRI_RAPTOR_COUNTING
@@ -123,6 +123,7 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
   auto const event_times = tt_.event_times_at_stop(
       r, stop_idx, kFwd ? event_type::kDep : event_type::kArr);
 
+
 #if defined(NIGIRI_RAPTOR_TRACING) && \
     !defined(NIGIRI_RAPTOR_TRACING_ONLY_UPDATES)
   for (auto const [t_offset, x] : utl::enumerate(event_times)) {
@@ -138,6 +139,7 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
         get_end_it<SearchDir>(event_times), mam_at_stop,
         [&](auto&& a, auto&& b) { return is_better(a, b); });
   };
+
 
   for (auto i = day_idx_t::value_t{0U}; i != n_days_to_iterate; ++i) {
     auto const day = kFwd ? day_at_stop + i : day_at_stop - i;
@@ -621,6 +623,7 @@ void raptor<SearchDir, IntermodalTarget>::set_time_at_destination(
 
 template <direction SearchDir, bool IntermodalTarget>
 void raptor<SearchDir, IntermodalTarget>::route() {
+  fmt::print("Standard\n");
   state_.reset(tt_, kInvalidTime<SearchDir>);
   collect_destinations(tt_, q_.destinations_, q_.dest_match_mode_,
                        state_.destinations_, state_.is_destination_);

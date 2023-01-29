@@ -3,6 +3,7 @@
 #include <string>
 #include <algorithm>
 #include <set>
+#include <chrono>
 
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/start_times.h"
@@ -15,6 +16,7 @@
 
 #include "utl/overloaded.h"
 #include "utl/enumerate.h"
+#include "utl/erase_if.h"
 
 #include "fmt/core.h"
 
@@ -60,13 +62,13 @@ unsigned profile_raptor::end_k() const {
   return std::min(kMaxTransfers, q_.max_transfers_) + 1U;
 }
 
-void init_location_with_offset(timetable const& tt,
-                               minutes_after_midnight_t time_to_arrive,
-                               location_idx_t location,
-                               day_idx_t n_days_in_search_interval,
-                               matrix<raptor_bag>& round_bags_,
-                               std::vector<bool>& station_mark,
-                               std::vector<raptor_bag>& best_bags) {
+void profile_raptor::init_location_with_offset(timetable const& tt,
+                                               minutes_after_midnight_t time_to_arrive,
+                                               location_idx_t location,
+                                               day_idx_t n_days_in_search_interval,
+                                               matrix<raptor_bag>& round_bags_,
+                                               std::vector<bool>& station_mark,
+                                               std::vector<raptor_bag>& best_bags) {
   for (auto const& r : tt.location_routes_.at(location)) {
 
     auto const location_seq = tt.route_location_seq_.at(r);
@@ -83,34 +85,81 @@ void init_location_with_offset(timetable const& tt,
             tt.event_mam(transport_idx, i,
                          event_type::kDep);
 
-        auto preliminary_start_time = stop_time - time_to_arrive;
-        auto day_offset = preliminary_start_time < duration_t::zero()
-            ? -(preliminary_start_time - 1_days).count() / 1440 : 0;
+        auto const stop_time_day_offset = stop_time.count() / 1440;
+        auto const stop_time_mam = stop_time % 1440;
 
-        const auto start_time = preliminary_start_time + duration_t {day_offset * 60 * 24};
+        auto start_time = stop_time_mam - time_to_arrive;
+        if (start_time < minutes_after_midnight_t::zero()) {
+          start_time = (1_days - minutes_after_midnight_t{std::abs(start_time.count()) % 1440});
+        }
         const auto at_stop = start_time + time_to_arrive;
+        const int trip_tdb_bias_shift = start_day_offset().v_
+                                        - stop_time_day_offset
+                                        + (at_stop.count() / 1440);
 
-        //Initialize traffic day bitfield and shift by number of days offset
-        dynamic_bitfield traffic_day_bitfield{std::string(n_days_in_search_interval.v_, '1'), n_days_in_search_interval.v_};
-        traffic_day_bitfield >>= day_offset;
+        auto trip_tdb = tt_.bitfields_[tt_.transport_traffic_days_[transport_idx]];
+        if (trip_tdb_bias_shift >= 0) {
+          trip_tdb >>= trip_tdb_bias_shift;
+        } else {
+          trip_tdb <<= std::abs(trip_tdb_bias_shift);
+        }
 
+        dynamic_bitfield traffic_day_bitfield{
+            trip_tdb,
+            this->number_of_days_in_search_interval().v_
+        };
 
-        bool merged = round_bags_[0U][to_idx(location)]
-          .add(raptor_label{
+        auto mask = std::string(n_days_in_search_interval.v_, '1');
+        const auto dep_lower_limit = search_interval_.from_.time_since_epoch();
+        if (start_time < minutes_after_midnight_t{dep_lower_limit.count() % 1440}) {
+          mask.back() = '0';
+        }
+
+        const auto dep_upper_limit = search_interval_.to_.time_since_epoch();
+        if (start_time >= minutes_after_midnight_t{dep_upper_limit.count() % 1440}) {
+          mask.front() = '0';
+        }
+        traffic_day_bitfield &= dynamic_bitfield{mask, n_days_in_search_interval.v_};
+
+        if (traffic_day_bitfield.any() && (at_stop-start_time) <= minutes_after_midnight_t{kMaxTravelTime}) {
+          bool merged = round_bags_[0U][to_idx(location)]
+                            .add(raptor_label{
+                                at_stop,
+                                start_time,
+                                traffic_day_bitfield
+                            }).first;
+
+          station_mark[to_idx(location)] = merged || station_mark[to_idx(location)];
+          if (merged) {
+            best_bags[to_idx(location)].add(raptor_label{
                 at_stop,
                 start_time,
                 traffic_day_bitfield
-            }).first;
-
-        station_mark[to_idx(location)] = merged || station_mark[to_idx(location)];
-        if (merged) {
-          best_bags[to_idx(location)].add(raptor_label{
-              at_stop,
-              start_time,
-              traffic_day_bitfield
-          });
+            });
+          }
         }
       }
+    }
+    auto const first_out_of_interval = search_interval_.to_.time_since_epoch() % 1440;
+
+    dynamic_bitfield traffic_day_bitfield{
+        std::string(n_days_in_search_interval.v_, '0').replace(0U, 1U, "1"),
+        this->number_of_days_in_search_interval().v_
+    };
+    bool merged = round_bags_[0U][to_idx(location)]
+                      .add(raptor_label{
+                          first_out_of_interval + time_to_arrive,
+                          first_out_of_interval,
+                          traffic_day_bitfield
+                      }).first;
+
+    station_mark[to_idx(location)] = merged || station_mark[to_idx(location)];
+    if (merged) {
+      best_bags[to_idx(location)].add(raptor_label{
+          first_out_of_interval + time_to_arrive,
+          first_out_of_interval,
+          traffic_day_bitfield
+      });
     }
   }
 
@@ -148,6 +197,7 @@ void profile_raptor::init_starts() {
 
 
 void profile_raptor::route() {
+  fmt::print("Profile\n");
   state_.reset(tt_);
   state_.search_interval_ = search_interval_;
 
@@ -156,11 +206,16 @@ void profile_raptor::route() {
   init_starts();
   rounds();
   reconstruct();
+  for (auto& r : state_.results_) {
+    utl::erase_if(r, [&](journey const& j) {
+      return !search_interval_.contains(
+          j.start_time_);
+    });
+  }
 }
 
 void profile_raptor::rounds() {
   print_state();
-
   for (auto k = 1U; k != end_k(); ++k) {
     trace_always("┊ round k={}\n", k);
     // Round k
@@ -199,7 +254,6 @@ void profile_raptor::rounds() {
       trace_always("┊ ╰ no stations marked, exit\n\n");
       return;
     }
-
     update_footpaths(k);
     trace_always("┊ ╰ round {} done\n", k);
     print_state();
@@ -235,7 +289,6 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
             active_label.to_string());
         continue;
       }
-
       const auto new_arr = tt_.event_mam(route_idx,
                                          active_label.t_.t_idx_,
                                          stop_idx,
@@ -255,23 +308,26 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     trace(
         "┊ │    Merge route bag into round bag:\n");
     for (const auto& rl : r_b) {
+      /*
       if (!state_.is_destination_[l_idx] && is_dominated_by_best_bags(rl)) {
         trace("┊ │    │ label={}, dominated by best target bags -> SKIP!\n", rl.to_string());
         continue;
       }
-
+      */
       raptor_bag& best_bag_of_stop = state_.best_bag_[l_idx];
-      if (best_bag_of_stop.add(rl).first) {
+      if (state_.round_bags_[k][cista::to_idx(l_idx)].add(rl).first) {
         trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
-        state_.round_bags_[k][cista::to_idx(l_idx)].add(rl);
+        state_.station_mark_[l_idx] = true;
         any_marked = true;
       } else {
         trace("┊ │    │ label={}, dominated by best local bag -> SKIP!\n", rl.to_string());
       }
     }
-    if (any_marked) {
-      state_.station_mark_[l_idx] = true;
+
+    if (i == stop_sequence.size()-1) {
+      return any_marked;
     }
+
 
     // 3. Assign Trips to labels from previous round and merge them into route bag
     const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
@@ -279,60 +335,50 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
         "┊ │    Assign trips to labels from prev round:\n");
     for (const auto& l : prev_round) {
       trace("┊ │    ├ search for transports serving label={}\n", l.to_string());
-      std::vector<transport> e_transports;
-      get_earliest_sufficient_transports(l, route_idx, stop_idx, e_transports);
-      dynamic_bitfield to_serve = l.traffic_day_bitfield_;
-      auto alr_shifted = size_t{0};
-      for (const auto& transport : e_transports) {
-        to_serve <<= transport.day_.v_ - alr_shifted;
-        alr_shifted += transport.day_.v_ - alr_shifted;
-
-        auto trip_traffic_day_bitfield = dynamic_bitfield{
-            tt_.bitfields_[tt_.transport_traffic_days_[transport.t_idx_]] >> this->start_day_offset().v_,
-            this->number_of_days_in_search_interval().v_
-        };
-
-        r_b.add(raptor_label{
-            l.arrival_,
-            l.departure_,
-            (to_serve & trip_traffic_day_bitfield) >> alr_shifted,
-            transport
-        });
-
-        to_serve &= ~trip_traffic_day_bitfield;
-        trace("┊ │    │  │ FOUND! transport={}, serving_on={} -> remaining={}\n", transport, trip_traffic_day_bitfield.to_string(), to_serve.to_string());
-      }
+      get_earliest_sufficient_transports(l, route_idx, stop_idx, r_b);
     }
   }
-
   return any_marked;
 }
 
 
 void profile_raptor::update_footpaths(unsigned const k) {
-
+  trace("┊ ├ FOOTPATHS\n");
+  std::vector<std::vector<raptor_label>> buffered_labels{tt_.n_locations(), std::vector<raptor_label>()};
   for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
+    trace("┊ ├ updating footpaths of {} ({} of {})\n", location{tt_, l_idx}, l_idx, tt_.n_locations());
     if (!state_.station_mark_[to_idx(l_idx)]) {
+      trace("┊ │    ├ Not marked -> SKIP!\n");
       continue;
     }
-
-    auto round_bag_copy = state_.round_bags_[k][to_idx(l_idx)];
-
+    const auto& round_bag = state_.round_bags_[k][to_idx(l_idx)];
     auto const fps = tt_.locations_.footpaths_out_[l_idx];
-
     for (auto const& fp : fps) {
       auto const target = to_idx(fp.target_);
-      auto const fp_offset = fp.duration_ - tt_.locations_.transfer_time_[l_idx];
+      auto const fp_offset = fp.duration_ - ((state_.is_destination_[to_idx(l_idx)]) ? minutes_after_midnight_t::zero() : tt_.locations_.transfer_time_[l_idx]);
+      trace("┊ │    ├ Footpath of duration {} to target {} merging {} labels\n", fp_offset, location{tt_, fp.target_}, round_bag.size());
+      for (auto it = round_bag.begin(); it != round_bag.end(); ++it) {
+        const raptor_label new_rl{
+          it->arrival_ + fp_offset,
+              it->departure_,
+              it->traffic_day_bitfield_};
 
-      for (auto it = round_bag_copy.begin(); it != round_bag_copy.end(); ++it) {
-        (*it).arrival_ += fp_offset;
+        /*
+        if (!state_.is_destination_[target] && is_dominated_by_best_bags(new_rl)) {
+          continue;
+        }
+         */
+        buffered_labels[target].push_back(new_rl);
+
       }
+    }
+  }
 
-      const auto res = state_.round_bags_[k][target].merge(round_bag_copy);
-      if (std::any_of(res.begin(), res.end(), [](const auto e){return e.first;})) {
-        state_.station_mark_[target] = true;
+  for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
+    for (const auto& l : buffered_labels[to_idx(l_idx)]) {
+      if (state_.round_bags_[k][to_idx(l_idx)].add(l).first) {
+        state_.station_mark_[to_idx(l_idx)] = true;
       }
-
     }
   }
 
@@ -341,65 +387,76 @@ void profile_raptor::update_footpaths(unsigned const k) {
 void profile_raptor::get_earliest_sufficient_transports(const raptor_label label,
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
-                                                        std::vector<transport>& transports) {
-  auto arr_time = label.arrival_;
-  auto td_bitfield = label.traffic_day_bitfield_;
-  day_idx_t day_offset{0};
+                                                        pareto_set<raptor_label>& bag) {
+  const auto lbl_dep_time = label.departure_;
+  auto lbl_arr_time = label.arrival_;
+  auto lbl_tdb = label.traffic_day_bitfield_;
 
-  auto dep_upper_limit = std::min(
-      label.departure_ + minutes_after_midnight_t{kMaxTravelTime},
-      1_days * static_cast<int16_t>(number_of_days_in_search_interval().v_)
-      );
+  auto const n_days_to_iterate =
+      std::min(kMaxTravelTime / 1440U + 1,
+               static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())));
 
   auto const stop_event_times = tt_.event_times_at_stop(
       r, stop_idx, event_type::kDep);
 
-  bool lower_bound_found = false;
-  while (dep_upper_limit >= minutes_after_midnight_t::zero() && td_bitfield.any()) {
-
-    auto const time_range_to_scan = it_range{
-        lower_bound_found ? stop_event_times.begin() : std::lower_bound(
-                                                         stop_event_times.begin(),
-                                                         stop_event_times.end(), arr_time,
-                                                         [&](auto&& a, auto&& b) { return a < b; }),
-        stop_event_times.end()};
-
-
-    if (!time_range_to_scan.empty()) {
-      auto const base =
-          static_cast<unsigned>(&*time_range_to_scan.begin_ - stop_event_times.data());
-      for (auto const [t_offset, ev] : utl::enumerate(time_range_to_scan)) {
-
-        if (ev > dep_upper_limit || !td_bitfield.any()) {
-          return;
-        }
-
-        auto const t = tt_.route_transport_ranges_[r][base + t_offset];
-        auto trip_traffic_day_bitfield = dynamic_bitfield{
-          tt_.bitfields_[tt_.transport_traffic_days_[t]] >> this->start_day_offset().v_,
-          this->number_of_days_in_search_interval().v_
-        };
-
-
-        if (!trip_traffic_day_bitfield.any()) continue;
-
-        const auto new_td_bitfield = td_bitfield & (~trip_traffic_day_bitfield);
-        if ((new_td_bitfield ^ td_bitfield).any()) {
-          td_bitfield = new_td_bitfield;
-          transports.push_back({
-              t,
-              day_offset
-          });
-        }
-      }
-
-      lower_bound_found = true;
+  for (auto i = day_idx_t::value_t{0U}; i != n_days_to_iterate; ++i) {
+    const auto day = (lbl_arr_time.count() / 1440U) + i;
+    if (!lbl_tdb.any()) {
+      return;
     }
 
-    dep_upper_limit = dep_upper_limit - 1_days;
-    arr_time = arr_time - 1_days;
-    td_bitfield <<= 1U;
-    day_offset++;
+    auto const time_range_to_scan = it_range{
+        i == 0U ? std::lower_bound(
+                      stop_event_times.begin(),
+                      stop_event_times.end(), lbl_arr_time,
+                      [&](auto&& a, auto&& b) { return (a % 1440U) < (b % 1440U); }) : stop_event_times.begin(),
+        stop_event_times.end()};
+
+    if (time_range_to_scan.empty()) {
+      continue;
+    }
+    auto const base =
+        static_cast<unsigned>(&*time_range_to_scan.begin_ - stop_event_times.data());
+
+    for (auto const [t_offset, ev] : utl::enumerate(time_range_to_scan)) {
+      auto const ev_mam = minutes_after_midnight_t{
+          ev.count() < 1440 ? ev.count() : ev.count() % 1440};
+
+      auto const ev_day_offset = static_cast<day_idx_t::value_t>(
+          ev.count() < 1440
+              ? 0
+              : static_cast<cista::base_t<day_idx_t>>(ev.count() / 1440));
+
+      const auto travel_time_lb = ev_mam + minutes_after_midnight_t{day * 1440U} - lbl_dep_time;
+      if (travel_time_lb.count() > kMaxTravelTime || !lbl_tdb.any()) {
+        return;
+      }
+
+      auto const t = tt_.route_transport_ranges_[r][base + t_offset];
+      const int trip_tdb_bias_shift = start_day_offset().v_
+                                      - ev_day_offset
+                                      + day;
+      auto trip_traffic_day_bitfield = dynamic_bitfield{
+          (trip_tdb_bias_shift >= 0) ?
+                                     tt_.bitfields_[tt_.transport_traffic_days_[t]] >> trip_tdb_bias_shift :
+                                     tt_.bitfields_[tt_.transport_traffic_days_[t]] << std::abs(trip_tdb_bias_shift),
+          this->number_of_days_in_search_interval().v_
+      };
+
+
+      if (!trip_traffic_day_bitfield.any()) continue;
+
+      const auto new_td_bitfield = lbl_tdb & (~trip_traffic_day_bitfield);
+      if ((new_td_bitfield ^ lbl_tdb).any()) {
+        bag.add(raptor_label{
+            label.arrival_,
+            label.departure_,
+            lbl_tdb & trip_traffic_day_bitfield,
+            relative_transport{t, relative_day_idx_t{day - ev_day_offset}}
+        });
+        lbl_tdb = new_td_bitfield;
+      }
+    }
   }
 }
 
@@ -574,15 +631,18 @@ void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
         .dest_time_ = round_times[k][to_idx(dest)].to_unixtime(tt_),
         .dest_ = dest,
         .transfers_ = static_cast<std::uint8_t>(k - 1)});
-    if (optimal &&
-        search_interval_.contains(it->start_time_) &&
-        search_interval_.contains(it->dest_time_)) {
-          try {
-            reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
-          } catch (std::exception const& e) {
-            results[dest_idx].erase(it);
-            log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
-            print_state("RECONSTRUCT FAILED");
+    if (optimal) {
+      auto const outside_interval =
+          !search_interval_.contains(it->start_time_);
+          if (!outside_interval) {
+            try {
+              reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
+            } catch (std::exception const& e) {
+              results[dest_idx].erase(it);
+              log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
+              print_state("RECONSTRUCT FAILED");
+              fmt::print("\n");
+            }
           }
     }
   }
