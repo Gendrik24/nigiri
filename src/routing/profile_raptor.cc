@@ -8,11 +8,13 @@
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/start_times.h"
 #include "nigiri/types.h"
+#include "nigiri/location.h"
 #include "nigiri/timetable.h"
 #include "nigiri/dynamic_bitfield.h"
 #include "nigiri/tracer.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/routing/reconstruct.h"
+#include "nigiri/location.h"
 
 #include "utl/overloaded.h"
 #include "utl/enumerate.h"
@@ -197,7 +199,6 @@ void profile_raptor::init_starts() {
 
 
 void profile_raptor::route() {
-  fmt::print("Profile\n");
   state_.reset(tt_);
   state_.search_interval_ = search_interval_;
 
@@ -294,33 +295,38 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
                                          stop_idx,
                                          event_type::kArr) + minutes_after_midnight_t{active_label.t_.day_.v_ * 1440};
 
-      auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
-      auto const is_destination = state_.is_destination_[l_idx];
-      auto const new_arr_with_transfer = new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset);
-
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
           active_label.to_string(), active_label.t_, new_arr, new_arr_with_transfer-new_arr);
-      active_label.arrival_ = new_arr_with_transfer;
+      active_label.arrival_ = new_arr;
     }
+
 
     // 2. Merge Route Bag into round bag
     trace(
         "┊ │    Merge route bag into round bag:\n");
-    for (const auto& rl : r_b) {
-      /*
-      if (!state_.is_destination_[l_idx] && is_dominated_by_best_bags(rl)) {
-        trace("┊ │    │ label={}, dominated by best target bags -> SKIP!\n", rl.to_string());
-        continue;
-      }
-      */
-      raptor_bag& best_bag_of_stop = state_.best_bag_[l_idx];
-      if (state_.round_bags_[k][cista::to_idx(l_idx)].add(rl).first) {
-        trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
-        state_.station_mark_[l_idx] = true;
-        any_marked = true;
-      } else {
-        trace("┊ │    │ label={}, dominated by best local bag -> SKIP!\n", rl.to_string());
+    if (stop.out_allowed()) {
+      auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
+      auto const is_destination = state_.is_destination_[l_idx];
+      for (const auto& rl : r_b) {
+        /*
+        if (!state_.is_destination_[l_idx] && is_dominated_by_best_bags(rl)) {
+          trace("┊ │    │ label={}, dominated by best target bags -> SKIP!\n", rl.to_string());
+          continue;
+        }
+        */
+        raptor_bag& best_bag_of_stop = state_.best_bag_[l_idx];
+        if (state_.round_bags_[k][cista::to_idx(l_idx)].add(raptor_label{
+                                                          rl.arrival_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
+                                                          rl.departure_,
+                                                          rl.traffic_day_bitfield_
+                                                            }).first) {
+          trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
+          state_.station_mark_[l_idx] = true;
+          any_marked = true;
+        } else {
+          trace("┊ │    │ label={}, dominated by best local bag -> SKIP!\n", rl.to_string());
+        }
       }
     }
 
@@ -330,12 +336,14 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
 
     // 3. Assign Trips to labels from previous round and merge them into route bag
-    const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
-    trace(
-        "┊ │    Assign trips to labels from prev round:\n");
-    for (const auto& l : prev_round) {
-      trace("┊ │    ├ search for transports serving label={}\n", l.to_string());
-      get_earliest_sufficient_transports(l, route_idx, stop_idx, r_b);
+    if (stop.in_allowed()) {
+      const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
+      trace(
+          "┊ │    Assign trips to labels from prev round:\n");
+      for (const auto& l : prev_round) {
+        trace("┊ │    ├ search for transports serving label={}\n", l.to_string());
+        get_earliest_sufficient_transports(l, route_idx, stop_idx, r_b);
+      }
     }
   }
   return any_marked;
@@ -433,6 +441,7 @@ void profile_raptor::get_earliest_sufficient_transports(const raptor_label label
       }
 
       auto const t = tt_.route_transport_ranges_[r][base + t_offset];
+
       const int trip_tdb_bias_shift = start_day_offset().v_
                                       - ev_day_offset
                                       + day;
@@ -448,68 +457,16 @@ void profile_raptor::get_earliest_sufficient_transports(const raptor_label label
 
       const auto new_td_bitfield = lbl_tdb & (~trip_traffic_day_bitfield);
       if ((new_td_bitfield ^ lbl_tdb).any()) {
-        bag.add(raptor_label{
-            label.arrival_,
-            label.departure_,
-            lbl_tdb & trip_traffic_day_bitfield,
-            relative_transport{t, relative_day_idx_t{day - ev_day_offset}}
-        });
+        const auto ins = raptor_label{
+          label.arrival_,
+              label.departure_,
+              lbl_tdb & trip_traffic_day_bitfield,
+              relative_transport{t, relative_day_idx_t{day - ev_day_offset}}
+        };
+        bag.add(ins);
         lbl_tdb = new_td_bitfield;
       }
     }
-  }
-}
-
-void profile_raptor::force_print_state(const char* comment) {
-  auto const empty_rounds = [&](std::uint32_t const l) {
-    for (auto k = 0U; k != end_k(); ++k) {
-      if (state_.round_bags_[k][l].size() != 0) {
-        return false;
-      }
-    }
-    return true;
-  };
-
-  fmt::print("PROFILE RAPTOR STATE INFO: {}\n", comment);
-
-  for (auto l = 0U; l != tt_.n_locations(); ++l) {
-    if (!is_special(location_idx_t{l}) && !state_.is_destination_[l] &&
-        state_.best_bag_[l].size() == 0 && empty_rounds(l)) {
-      continue;
-    }
-
-    std::string_view name, track;
-    auto const type = tt_.locations_.types_.at(location_idx_t{l});
-    if (type == location_type::kTrack) {
-      name =
-          tt_.locations_.names_.at(tt_.locations_.parents_[location_idx_t{l}])
-              .view();
-      track = tt_.locations_.names_.at(location_idx_t{l}).view();
-    } else {
-      name = tt_.locations_.names_.at(location_idx_t{l}).view();
-      track = "---";
-    }
-    tt_.locations_.names_[location_idx_t{l}].view();
-    auto const id = tt_.locations_.ids_[location_idx_t{l}].view();
-    fmt::print(
-        "[{}] {:8} [name={:48}, track={:10}, id={:16}]: ",
-        state_.is_destination_[l] ? "X" : "_", l, name, track,
-        id.substr(0, std::min(std::string_view ::size_type{16U}, id.size())));
-    auto const b = state_.best_bag_[l];
-    if (b.size() == 0) {
-      fmt::print("best=_________, round_times: ");
-    } else {
-      fmt::print("best={:9}, round_times: ", b.size());
-    }
-    for (auto i = 0U; i != kMaxTransfers + 1U; ++i) {
-      auto const rb = state_.round_bags_[i][l];
-      if (rb.size() > 0) {
-        fmt::print("{:9} ", rb.size());
-      } else {
-        fmt::print("_________ ");
-      }
-    }
-    fmt::print("\n");
   }
 }
 
@@ -641,7 +598,7 @@ void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
               results[dest_idx].erase(it);
               log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
               print_state("RECONSTRUCT FAILED");
-              fmt::print("\n");
+              fmt::print("Start at {}, Dest time {}, destination {}, transfers {}\n", start_at_start, round_times[k][to_idx(dest)].to_unixtime(tt_), dest, k-1);
             }
           }
     }
