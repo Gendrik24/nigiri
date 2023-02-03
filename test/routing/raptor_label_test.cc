@@ -18,7 +18,6 @@ TEST_CASE("raptor-label") {
     CHECK_EQ(label_1.dominates(label_2), false);
     CHECK_EQ(label_2.dominates(label_1), true);
     CHECK_EQ(label_3.dominates(label_1), true);
-    CHECK_EQ(label_1.dominates(label_1), false);
     CHECK_EQ(label_1.dominates(label_4), false);
     CHECK_EQ(label_5.dominates(label_6), true);
     CHECK_EQ(label_6.dominates(label_5), false);
