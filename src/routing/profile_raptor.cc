@@ -7,6 +7,7 @@
 
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/start_times.h"
+#include "nigiri/routing/raptor_route_label.h"
 #include "nigiri/types.h"
 #include "nigiri/location.h"
 #include "nigiri/timetable.h"
@@ -266,7 +267,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
 
-  raptor_bag r_b{};
+  raptor_route_bag r_b{};
   for (auto i = 0U; i != stop_sequence.size(); ++i) {
     auto const stop_idx =
         static_cast<unsigned>(i);
@@ -281,9 +282,9 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     // 1. Iterate over Labels in Route Bag and update arrival times according to assigned transport
     trace(
         "┊ │    Update arrival times of labels in route bag:\n");
-    for (auto it = r_b.begin(); it != r_b.end(); ++it) {
-      auto& active_label = *it;
-
+    auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
+    auto const is_destination = state_.is_destination_[l_idx];
+    for (const auto& active_label : r_b) {
       if (active_label.t_.t_idx_ == transport_idx_t::invalid()) {
         trace(
             "┊ │    │ current label={} has no active transport -> SKIP!\n",
@@ -298,35 +299,20 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
           active_label.to_string(), active_label.t_, new_arr, new_arr);
-      active_label.arrival_ = new_arr;
-    }
+      if (!stop.out_allowed()) {
+        continue;
+      }
 
-
-    // 2. Merge Route Bag into round bag
-    trace(
-        "┊ │    Merge route bag into round bag:\n");
-    if (stop.out_allowed()) {
-      auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
-      auto const is_destination = state_.is_destination_[l_idx];
-      for (const auto& rl : r_b) {
-        /*
-        if (!state_.is_destination_[l_idx] && is_dominated_by_best_bags(rl)) {
-          trace("┊ │    │ label={}, dominated by best target bags -> SKIP!\n", rl.to_string());
-          continue;
-        }
-        */
-        raptor_bag& best_bag_of_stop = state_.best_bag_[l_idx];
-        if (state_.round_bags_[k][cista::to_idx(l_idx)].add(raptor_label{
-                                                          rl.arrival_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
-                                                          rl.departure_,
-                                                          rl.traffic_day_bitfield_
-                                                            }).first) {
-          trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
-          state_.station_mark_[l_idx] = true;
-          any_marked = true;
-        } else {
-          trace("┊ │    │ label={}, dominated by best local bag -> SKIP!\n", rl.to_string());
-        }
+      if (state_.round_bags_[k][cista::to_idx(l_idx)].add(raptor_label{
+                                                              new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
+                                                              active_label.departure_,
+                                                              active_label.traffic_day_bitfield_
+                                                          }).first) {
+        trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
+        state_.station_mark_[l_idx] = true;
+        any_marked = true;
+      } else {
+        trace("┊ │    │ label={}, dominated by best local bag -> SKIP!\n", rl.to_string());
       }
     }
 
@@ -395,7 +381,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
 void profile_raptor::get_earliest_sufficient_transports(const raptor_label label,
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
-                                                        pareto_set<raptor_label>& bag) {
+                                                        pareto_set<raptor_route_label>& bag) {
   const auto lbl_dep_time = label.departure_;
   auto lbl_arr_time = label.arrival_;
   auto lbl_tdb = label.traffic_day_bitfield_;
@@ -457,13 +443,11 @@ void profile_raptor::get_earliest_sufficient_transports(const raptor_label label
 
       const auto new_td_bitfield = lbl_tdb & (~trip_traffic_day_bitfield);
       if ((new_td_bitfield ^ lbl_tdb).any()) {
-        const auto ins = raptor_label{
-          label.arrival_,
-              label.departure_,
-              lbl_tdb & trip_traffic_day_bitfield,
-              relative_transport{t, relative_day_idx_t{day - ev_day_offset}}
-        };
-        bag.add(ins);
+        bag.add(raptor_route_label{
+            label.departure_,
+            relative_transport{t, relative_day_idx_t{day - ev_day_offset}},
+            lbl_tdb & trip_traffic_day_bitfield
+        });
         lbl_tdb = new_td_bitfield;
       }
     }

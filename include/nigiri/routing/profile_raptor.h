@@ -6,6 +6,7 @@
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/raptor.h"
 #include "nigiri/routing/raptor_label.h"
+#include "nigiri/routing/raptor_route_label.h"
 #include "nigiri/types.h"
 
 namespace nigiri {
@@ -38,7 +39,7 @@ struct profile_raptor {
   void get_earliest_sufficient_transports(const raptor_label label,
                                           route_idx_t const r,
                                           unsigned const stop_idx,
-                                          pareto_set<raptor_label>& bag);
+                                          pareto_set<raptor_route_label>& bag);
 
   void force_print_state(char const* comment = "");
   void print_state(char const* comment = "");
