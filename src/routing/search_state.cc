@@ -61,10 +61,10 @@ void profile_search_state::reset(const timetable& tt) {
   std::fill(begin(route_mark_), end(route_mark_), false);
 
   best_bag_.resize(tt.n_locations());
-  std::fill(begin(best_bag_), end(best_bag_), raptor_bag());
+  std::fill(begin(best_bag_), end(best_bag_), bmc_raptor_bag<arrival_departure_label>());
 
   round_bags_.resize(kMaxTransfers + 1U, tt.n_locations());
-  round_bags_.reset(raptor_bag());
+  round_bags_.reset(bmc_raptor_bag<arrival_departure_label>());
 
   starts_.clear();
   destinations_.clear();

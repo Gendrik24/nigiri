@@ -26,7 +26,7 @@ struct arrival_departure_label {
     return arrival_ <= other.arrival_ && departure_ >= other.departure_;
   }
 
-  inline arrival_departure_label add_day_offset(std::size_t o) {
+  inline arrival_departure_label add_day_offset(std::size_t o) const {
     return arrival_departure_label{
         arrival_ + minutes_after_midnight_t{1440 * o},
         departure_ + minutes_after_midnight_t{1440 * o}};

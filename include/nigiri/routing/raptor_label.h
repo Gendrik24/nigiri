@@ -68,6 +68,4 @@ struct raptor_label {
   dynamic_bitfield traffic_day_bitfield_;
 };
 
-typedef pareto_set<raptor_label> raptor_bag;
-
 } // namespace nigiri::routing

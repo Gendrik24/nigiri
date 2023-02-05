@@ -10,6 +10,8 @@
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/start_times.h"
 #include "nigiri/routing/raptor_label.h"
+#include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/arrival_departure_label.h"
 #include "nigiri/types.h"
 
 
@@ -44,8 +46,8 @@ struct search_state {
 struct profile_search_state {
   void reset(timetable const& tt);
 
-  std::vector<raptor_bag> best_bag_;
-  matrix<raptor_bag> round_bags_;
+  std::vector<bmc_raptor_bag<arrival_departure_label>> best_bag_;
+  matrix<bmc_raptor_bag<arrival_departure_label>> round_bags_;
   std::vector<bool> station_mark_;
   std::vector<bool> prev_station_mark_;
   std::vector<bool> route_mark_;

@@ -49,6 +49,4 @@ struct raptor_route_label {
   relative_transport t_;
 };
 
-typedef pareto_set<raptor_route_label> raptor_route_bag;
-
 }

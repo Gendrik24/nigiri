@@ -61,19 +61,31 @@ struct bmc_raptor_bag {
   std::vector<T> uncompress() const noexcept {
     std::vector<T> uncompressed;
     for (const auto& l : labels_) {
-      const auto& tdb = l.tdb_;
+      auto tdb = l.tdb_;
       for (std::size_t i = 0U; i < tdb.size(); ++i) {
         if (tdb.none()) {
           break;
         }
         if (tdb[0]) {
-          uncompressed.push_back(l.add_day_offset(i));
+          uncompressed.push_back(l.label_.add_day_offset(i));
         }
 
         tdb >>= 1U;
       }
     }
     return uncompressed;
+  }
+
+  label_bitfield filter_dominated(const T& label, label_bitfield tdb) const noexcept {
+    for (const auto& l : labels_) {
+      if (tdb.none()) {
+        return tdb;
+      }
+      if (l.label_.dominates(label)) {
+        tdb &= ~l.tdb_;
+      }
+    }
+    return tdb;
   }
 
   friend const_iterator begin(bmc_raptor_bag const& s) { return s.begin(); }

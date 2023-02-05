@@ -7,6 +7,9 @@
 #include "nigiri/routing/raptor.h"
 #include "nigiri/routing/raptor_label.h"
 #include "nigiri/routing/raptor_route_label.h"
+#include "nigiri/routing/arrival_departure_label.h"
+#include "nigiri/routing/transport_departure_label.h"
+#include "nigiri/routing/bmc_raptor_bag.h"
 #include "nigiri/types.h"
 
 #define PROFILE_RAPTOR_GLOBAL_PRUNING
@@ -19,31 +22,28 @@ struct timetable;
 namespace nigiri::routing {
 
 using dep_arr_t = std::pair<routing_time, routing_time>;
+using raptor_bag = bmc_raptor_bag<arrival_departure_label>;
+using raptor_route_bag = bmc_raptor_bag<transport_departure_label>;
 
 struct profile_search_state;
 
 struct profile_raptor {
   profile_raptor(timetable const& tt, profile_search_state& state, query q);
   void init_starts();
-  void init_location_with_offset(timetable const& tt,
-                                 minutes_after_midnight_t time_to_arrive,
-                                 location_idx_t location,
-                                 day_idx_t n_days_in_search_interval,
-                                 matrix<raptor_bag>& round_bags_,
-                                 std::vector<bool>& station_mark,
-                                 std::vector<raptor_bag>& best_bags);
+  void init_location_with_offset(minutes_after_midnight_t time_to_arrive,
+                                 location_idx_t location);
   void route();
   void rounds();
   void update_destination_bag(unsigned long k);
-  bool is_dominated_by_best_bags(const raptor_label& l);
 
   bool update_route(unsigned const k, route_idx_t route);
   void update_footpaths(unsigned const k);
 
-  void get_earliest_sufficient_transports(const raptor_label label,
+  void get_earliest_sufficient_transports(const arrival_departure_label label,
+                                          label_bitfield lbl_tdb,
                                           route_idx_t const r,
                                           unsigned const stop_idx,
-                                          pareto_set<raptor_route_label>& bag);
+                                          raptor_route_bag& bag);
 
   void force_print_state(char const* comment = "");
   void print_state(char const* comment = "");
@@ -63,7 +63,7 @@ struct profile_raptor {
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   query q_;
-  pareto_set<raptor_label> best_destination_bag;
+  raptor_bag best_destination_bag;
   interval<unixtime_t> search_interval_;
   profile_search_state& state_;
   stats stats_;
