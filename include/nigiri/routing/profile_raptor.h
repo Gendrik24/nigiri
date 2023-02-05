@@ -9,6 +9,9 @@
 #include "nigiri/routing/raptor_route_label.h"
 #include "nigiri/types.h"
 
+#define PROFILE_RAPTOR_GLOBAL_PRUNING
+#define PROFILE_RAPTOR_LOCAL_PRUNING
+
 namespace nigiri {
 struct timetable;
 }
@@ -31,6 +34,7 @@ struct profile_raptor {
                                  std::vector<raptor_bag>& best_bags);
   void route();
   void rounds();
+  void update_destination_bag(unsigned long k);
   bool is_dominated_by_best_bags(const raptor_label& l);
 
   bool update_route(unsigned const k, route_idx_t route);
@@ -59,6 +63,7 @@ struct profile_raptor {
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   query q_;
+  pareto_set<raptor_label> best_destination_bag;
   interval<unixtime_t> search_interval_;
   profile_search_state& state_;
   stats stats_;

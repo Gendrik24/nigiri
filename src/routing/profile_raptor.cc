@@ -168,6 +168,14 @@ void profile_raptor::init_location_with_offset(timetable const& tt,
 
 }
 
+void profile_raptor::update_destination_bag(unsigned long k) {
+  for (auto const dest : state_.destinations_.front()) {
+    for (const auto& rl : state_.round_bags_[k-1][to_idx(dest)]) {
+      best_destination_bag.add(rl);
+    }
+  }
+}
+
 void profile_raptor::init_starts() {
   for (const auto& o : q_.start_) {
     location_idx_t loc = o.target_;
@@ -220,6 +228,11 @@ void profile_raptor::rounds() {
   print_state();
   for (auto k = 1U; k != end_k(); ++k) {
     trace_always("┊ round k={}\n", k);
+
+    #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+    update_destination_bag(k);
+    #endif
+
     // Round k
     auto any_marked = false;
     for (auto l_idx = location_idx_t{0U};
@@ -227,6 +240,11 @@ void profile_raptor::rounds() {
                       state_.station_mark_.size()); ++l_idx) {
       
       if (state_.station_mark_[to_idx(l_idx)]) {
+        #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
+          for (const auto& l : state_.round_bags_[k-1][to_idx(l_idx)]) {
+            state_.best_bag_[to_idx(l_idx)].add(l);
+          }
+        #endif
         any_marked = true;
         for (auto const& r : tt_.location_routes_[l_idx]) {
           state_.route_mark_[to_idx(r)] = true;
@@ -279,7 +297,6 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
         stop_idx, tt_.locations_.names_[location_idx_t{l_idx}].view(),
         tt_.locations_.ids_[location_idx_t{l_idx}].view(), l_idx);
 
-    // 1. Iterate over Labels in Route Bag and update arrival times according to assigned transport
     trace(
         "┊ │    Update arrival times of labels in route bag:\n");
     auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
@@ -299,15 +316,29 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
           active_label.to_string(), active_label.t_, new_arr, new_arr);
+      const auto candidate_lbl = raptor_label{
+          new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
+          active_label.departure_,
+          active_label.traffic_day_bitfield_
+      };
+
       if (!stop.out_allowed()) {
         continue;
       }
 
-      if (state_.round_bags_[k][cista::to_idx(l_idx)].add(raptor_label{
-                                                              new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
-                                                              active_label.departure_,
-                                                              active_label.traffic_day_bitfield_
-                                                          }).first) {
+      #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+      if (best_destination_bag.dominates(candidate_lbl)) {
+        continue;
+      }
+      #endif
+
+      #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
+      if (state_.best_bag_[l_idx].dominates(candidate_lbl)) {
+        continue;
+      }
+      #endif
+
+      if (state_.round_bags_[k][cista::to_idx(l_idx)].add(candidate_lbl).first) {
         trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
         state_.station_mark_[l_idx] = true;
         any_marked = true;
@@ -320,9 +351,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       return any_marked;
     }
 
-
-    // 3. Assign Trips to labels from previous round and merge them into route bag
-    if (stop.in_allowed()) {
+    if (stop.in_allowed() && state_.prev_station_mark_[l_idx]) {
       const raptor_bag& prev_round = state_.round_bags_[k-1][cista::to_idx(l_idx)];
       trace(
           "┊ │    Assign trips to labels from prev round:\n");
@@ -351,19 +380,24 @@ void profile_raptor::update_footpaths(unsigned const k) {
       auto const target = to_idx(fp.target_);
       auto const fp_offset = fp.duration_ - ((state_.is_destination_[to_idx(l_idx)]) ? minutes_after_midnight_t::zero() : tt_.locations_.transfer_time_[l_idx]);
       trace("┊ │    ├ Footpath of duration {} to target {} merging {} labels\n", fp_offset, location{tt_, fp.target_}, round_bag.size());
-      for (auto it = round_bag.begin(); it != round_bag.end(); ++it) {
+      for (const auto & rl : round_bag) {
         const raptor_label new_rl{
-          it->arrival_ + fp_offset,
-              it->departure_,
-              it->traffic_day_bitfield_};
+          rl.arrival_ + fp_offset,
+              rl.departure_,
+              rl.traffic_day_bitfield_};
 
-        /*
-        if (!state_.is_destination_[target] && is_dominated_by_best_bags(new_rl)) {
+        #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+        if (best_destination_bag.dominates(new_rl)) {
           continue;
         }
-         */
-        buffered_labels[target].push_back(new_rl);
+        #endif
 
+        #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
+        if (state_.best_bag_[target].dominates(new_rl)) {
+          continue;
+        }
+        #endif
+        buffered_labels[target].push_back(new_rl);
       }
     }
   }
