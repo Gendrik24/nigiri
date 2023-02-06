@@ -15,6 +15,7 @@
 #include "nigiri/tracer.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/routing/reconstruct.h"
+#include "nigiri/routing/for_each_meta.h"
 #include "nigiri/location.h"
 
 #include "utl/overloaded.h"
@@ -22,6 +23,13 @@
 #include "utl/erase_if.h"
 
 #include "fmt/core.h"
+
+#define NIGIRI_PROFILE_RAPTOR_COUNTING
+#ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
+#define NIGIRI_PROFILE_COUNT(s) ++stats_.s
+#else
+#define NIGIRI_PROFILE_COUNT(s)
+#endif
 
 namespace nigiri::routing {
 
@@ -136,19 +144,25 @@ void profile_raptor::update_destination_bag(unsigned long k) {
 }
 
 void profile_raptor::init_starts() {
+  std::set<location_idx_t> seen;
   for (const auto& o : q_.start_) {
-    location_idx_t loc = o.target_;
-    init_location_with_offset(o.duration_,loc);
-
-    // It is possible to transfer to another location and start from there
-    if (q_.use_start_footpaths_) {
-
-      // First get all outgoing footpaths
-      auto const footpaths_out = tt_.locations_.footpaths_out_[loc];
-      for (const auto& fp : footpaths_out) {
-        init_location_with_offset(o.duration_ + fp.duration_,fp.target_);
+    seen.clear();
+    for_each_meta(tt_, q_.start_match_mode_, o.target_, [&](location_idx_t const l) {
+      if (!seen.emplace(l).second) {
+        return;
       }
-    }
+      init_location_with_offset(o.duration_,l);
+
+      // It is possible to transfer to another location and start from there
+      if (q_.use_start_footpaths_) {
+
+        // First get all outgoing footpaths
+        auto const footpaths_out = tt_.locations_.footpaths_out_[l];
+        for (const auto& fp : footpaths_out) {
+          init_location_with_offset(o.duration_ + fp.duration_,fp.target_);
+        }
+      }
+    });
   }
 }
 
@@ -212,6 +226,7 @@ void profile_raptor::rounds() {
         continue;
       }
       trace("┊ ├ updating route {}\n", r_id);
+      NIGIRI_PROFILE_COUNT(n_routes_visited_);
       any_marked |= update_route(k, route_idx_t{r_id});
     }
 
@@ -267,7 +282,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
           active_label.label_.departure_};
       auto candidate_tdb = active_label.tdb_;
 
-      if (!stop.out_allowed()) {
+      if (!stop.out_allowed() || (candidate_lbl.arrival_ - candidate_lbl.departure_).count() > kMaxTravelTime) {
         continue;
       }
 
@@ -285,6 +300,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
       if (state_.round_bags_[k][cista::to_idx(l_idx)].merge(candidate_lbl, candidate_tdb)) {
         trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
+        NIGIRI_PROFILE_COUNT(n_earliest_arrival_updated_by_route_);
         state_.station_mark_[l_idx] = true;
         any_marked = true;
       } else {
@@ -323,6 +339,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
     const auto& round_bag = state_.round_bags_[k][to_idx(l_idx)];
     auto const fps = tt_.locations_.footpaths_out_[l_idx];
     for (auto const& fp : fps) {
+      NIGIRI_PROFILE_COUNT(n_footpaths_visited_);
       auto const target = to_idx(fp.target_);
       auto const fp_offset = fp.duration_ - ((state_.is_destination_[to_idx(l_idx)]) ? minutes_after_midnight_t::zero() : tt_.locations_.transfer_time_[l_idx]);
       trace("┊ │    ├ Footpath of duration {} to target {} merging {} labels\n", fp_offset, location{tt_, fp.target_}, round_bag.size());
@@ -330,6 +347,10 @@ void profile_raptor::update_footpaths(unsigned const k) {
         const arrival_departure_label l_with_foot{
           rl.label_.arrival_ + fp_offset,
               rl.label_.departure_};
+
+        if ((l_with_foot.arrival_-l_with_foot.departure_).count() > kMaxTravelTime) {
+          continue;
+        }
 
         auto tdb = rl.tdb_;
 
@@ -353,6 +374,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
   for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
     for (const auto& l : buffered_labels[to_idx(l_idx)]) {
       if (state_.round_bags_[k][to_idx(l_idx)].merge(l.first, l.second)) {
+        NIGIRI_PROFILE_COUNT(n_earliest_arrival_updated_by_footpath_);
         state_.station_mark_[to_idx(l_idx)] = true;
       }
     }
@@ -365,6 +387,7 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
                                                         raptor_route_bag& bag) {
+  NIGIRI_PROFILE_COUNT(n_earliest_trip_calls_);
   const auto lbl_dep_time = label.departure_;
   auto lbl_arr_time = label.arrival_;
 
