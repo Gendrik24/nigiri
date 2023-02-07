@@ -28,7 +28,7 @@ using raptor_route_bag = bmc_raptor_bag<transport_departure_label>;
 struct profile_search_state;
 
 struct profile_raptor {
-  profile_raptor(timetable const& tt, profile_search_state& state, query q);
+  profile_raptor(timetable const& tt, profile_search_state& state, query q, stats s);
   void init_starts();
   void init_location_with_offset(minutes_after_midnight_t time_to_arrive,
                                  location_idx_t location);

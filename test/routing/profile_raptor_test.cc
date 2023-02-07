@@ -6,6 +6,7 @@
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/raptor_label.h"
+#include "nigiri/routing/raptor.h"
 
 #include "nigiri/timetable.h"
 #include "nigiri/dynamic_bitfield.h"
@@ -84,8 +85,9 @@ TEST_CASE("profile-raptor") {
       .extend_interval_earlier_ = false,
       .extend_interval_later_ = false};
 
+  stats s;
   auto fwdp_r = routing::profile_raptor{
-      tt, profile_state, q
+      tt, profile_state, q, s
   };
   fwdp_r.route();
 
