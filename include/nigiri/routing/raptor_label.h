@@ -22,7 +22,7 @@ struct raptor_label {
                dynamic_bitfield traffic_day_bitfield)
                 : arrival_(arrival),
                   departure_(departure),
-                  traffic_day_bitfield_(traffic_day_bitfield){};
+                  traffic_day_bitfield_(traffic_day_bitfield){}
 
   friend bool operator==(const raptor_label& lhs, const raptor_label& rhs) {
     return lhs.arrival_ == rhs.arrival_

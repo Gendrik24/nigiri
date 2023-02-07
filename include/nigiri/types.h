@@ -298,4 +298,11 @@ inline local_time to_local_time(timezone const& tz, unixtime_t const t) {
   return tz.apply([t](auto&& x) { return to_local_time(x, t); });
 }
 
+template <std::size_t Size_1, std::size_t Size_2>
+inline void truncate_to(cista::bitset<Size_1>& bitset_1, cista::bitset<Size_2>& bitset_2) {
+  for (auto i = 0U; i<bitset_2.blocks_.size(); ++i) {
+    bitset_2.blocks_[i] = bitset_1.blocks_[i];
+  }
+}
+
 }  // namespace nigiri

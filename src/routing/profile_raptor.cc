@@ -93,9 +93,9 @@ void profile_raptor::init_location_with_offset(minutes_after_midnight_t time_to_
 
         auto trip_tdb = tt_.bitfields_[tt_.transport_traffic_days_[transport_idx]];
         if (trip_tdb_bias_shift >= 0) {
-          trip_tdb >>= trip_tdb_bias_shift;
+          trip_tdb >>= static_cast<unsigned long>(trip_tdb_bias_shift);
         } else {
-          trip_tdb <<= std::abs(trip_tdb_bias_shift);
+          trip_tdb <<= static_cast<unsigned long>(std::abs(trip_tdb_bias_shift));
         }
 
         auto mask = std::string(number_of_days_in_search_interval().v_, '1');
@@ -442,9 +442,7 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
                                      tt_.bitfields_[tt_.transport_traffic_days_[t]] >> trip_tdb_bias_shift :
                                      tt_.bitfields_[tt_.transport_traffic_days_[t]] << std::abs(trip_tdb_bias_shift);
       auto trip_label_traffic_day_bitfield = label_bitfield{};
-      for (auto i=0U; i<trip_label_traffic_day_bitfield.blocks_.size(); ++i) {
-        trip_label_traffic_day_bitfield.blocks_[i] = trip_traffic_day_bitfield.blocks_[i];
-      }
+      truncate_to(trip_traffic_day_bitfield, trip_label_traffic_day_bitfield);
 
       if (trip_label_traffic_day_bitfield.none()) continue;
 
