@@ -44,7 +44,7 @@ profile_raptor::profile_raptor(const timetable& tt,
           [this](unixtime_t const start_time) {
             return interval<unixtime_t>{start_time, tt_.end()};
           }})),
-      state_{state}{};
+      state_{state}{}
 
 day_idx_t profile_raptor::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
@@ -439,7 +439,10 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
       auto trip_traffic_day_bitfield =(trip_tdb_bias_shift >= 0) ?
                                      tt_.bitfields_[tt_.transport_traffic_days_[t]] >> trip_tdb_bias_shift :
                                      tt_.bitfields_[tt_.transport_traffic_days_[t]] << std::abs(trip_tdb_bias_shift);
-      auto trip_label_traffic_day_bitfield = label_bitfield{trip_traffic_day_bitfield.to_string()};
+      auto trip_label_traffic_day_bitfield = label_bitfield{};
+      for (auto i=0U; i<trip_label_traffic_day_bitfield.blocks_.size(); ++i) {
+        trip_label_traffic_day_bitfield.blocks_[i] = trip_traffic_day_bitfield.blocks_[i];
+      }
 
       if (trip_label_traffic_day_bitfield.none()) continue;
 

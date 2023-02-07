@@ -39,7 +39,7 @@ using bitset = cista::bitset<Size>;
 constexpr auto const kMaxDays = 512;
 using bitfield = bitset<kMaxDays>;
 
-constexpr auto const kMaxSearchDays = 16;
+constexpr auto const kMaxSearchDays = 32;
 using label_bitfield = bitset<kMaxSearchDays>;
 
 using bitvec = cista::offset::bitvec;
