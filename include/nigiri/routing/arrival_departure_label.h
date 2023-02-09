@@ -8,12 +8,12 @@ namespace nigiri::routing {
 
 struct arrival_departure_label {
   arrival_departure_label()
-      : arrival_(minutes_after_midnight_t::min()),
-        departure_(minutes_after_midnight_t::max())
+      : arrival_(long_minutes_after_midnight_t ::min()),
+        departure_(long_minutes_after_midnight_t ::max())
       {}
 
-  arrival_departure_label(minutes_after_midnight_t arrival,
-                          minutes_after_midnight_t departure)
+  arrival_departure_label(long_minutes_after_midnight_t arrival,
+                          long_minutes_after_midnight_t departure)
       : arrival_(arrival),
         departure_(departure)
       {}
@@ -28,12 +28,12 @@ struct arrival_departure_label {
 
   inline arrival_departure_label add_day_offset(std::size_t o) const {
     return arrival_departure_label{
-        arrival_ + minutes_after_midnight_t{1440 * o},
-        departure_ + minutes_after_midnight_t{1440 * o}};
+        arrival_ + long_minutes_after_midnight_t {1440 * o},
+        departure_ + long_minutes_after_midnight_t {1440 * o}};
   }
 
-  minutes_after_midnight_t arrival_;
-  minutes_after_midnight_t departure_;
+  long_minutes_after_midnight_t arrival_;
+  long_minutes_after_midnight_t departure_;
 };
 
 }

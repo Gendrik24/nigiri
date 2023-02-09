@@ -85,10 +85,8 @@ TEST_CASE("profile-raptor") {
       .extend_interval_earlier_ = false,
       .extend_interval_later_ = false};
 
-  stats s;
   auto fwdp_r = routing::profile_raptor{
-      tt, profile_state, q, s
-  };
+      tt, profile_state, q};
   fwdp_r.route();
 
   std::stringstream ss_profile;

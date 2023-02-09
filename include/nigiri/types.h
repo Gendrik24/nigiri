@@ -166,6 +166,7 @@ struct relative_transport {
 using i32_minutes = std::chrono::duration<std::int32_t, std::ratio<60>>;
 using i16_minutes = std::chrono::duration<std::int16_t, std::ratio<60>>;
 using duration_t = i16_minutes;
+using long_duration_t = i32_minutes;
 using unixtime_t = std::chrono::sys_time<i32_minutes>;
 using local_time = date::local_time<i32_minutes>;
 
@@ -182,6 +183,7 @@ constexpr duration_t operator"" _days(unsigned long long n) {
 }
 
 using minutes_after_midnight_t = duration_t;
+using long_minutes_after_midnight_t = long_duration_t;
 
 struct tz_offsets {
   struct season {

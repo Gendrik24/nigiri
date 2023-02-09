@@ -35,8 +35,7 @@ namespace nigiri::routing {
 
 profile_raptor::profile_raptor(const timetable& tt,
                                profile_search_state& state,
-                               query q,
-                               stats s)
+                               query q)
     : tt_{tt},
       n_tt_days_{static_cast<std::uint16_t>(tt_.date_range_.size().count())},
       q_(q),
@@ -45,8 +44,7 @@ profile_raptor::profile_raptor(const timetable& tt,
           [this](unixtime_t const start_time) {
             return interval<unixtime_t>{start_time, tt_.end()};
           }})),
-      state_{state},
-      stats_{s} {}
+      state_{state}{}
 
 day_idx_t profile_raptor::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
@@ -557,8 +555,8 @@ void profile_raptor::reconstruct() {
       ert.reserve(uncompressed_labels.size());
       for (const auto& arr_dep_l : uncompressed_labels) {
         ert.push_back(dep_arr_t{
-            routing_time{start_day_offset(), arr_dep_l.departure_},
-            routing_time{start_day_offset(), arr_dep_l.arrival_}
+            routing_time{start_day_offset() + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440},
+            routing_time{start_day_offset() + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440}
         });
       }
 
