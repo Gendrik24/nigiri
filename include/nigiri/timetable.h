@@ -375,6 +375,9 @@ struct timetable {
   // For each trip the corresponding route
   vector_map<transport_idx_t, route_idx_t> transport_route_;
 
+  vector<route_idx_t> ordered_conflict_routes_;
+  vector<std::size_t> conflict_group_upper_bound;
+
   // Trip index -> merged trips
   vecvec<transport_idx_t, merged_trips_idx_t> transport_to_trip_section_;
 

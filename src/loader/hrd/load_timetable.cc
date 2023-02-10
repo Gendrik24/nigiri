@@ -11,6 +11,7 @@
 
 #include "nigiri/loader/build_footpaths.h"
 #include "nigiri/loader/build_lb_graph.h"
+#include "nigiri/loader/build_conflict_graph.h"
 #include "nigiri/loader/hrd/service/service_builder.h"
 #include "nigiri/loader/hrd/stamm/stamm.h"
 #include "nigiri/special_stations.h"
@@ -148,6 +149,7 @@ void load_timetable(source_idx_t const src,
   build_lb_graph<direction::kBackward>(tt);
   build_route_stop_times(tt);
   build_route_traffic_days(tt);
+  build_conflict_graph(tt);
 }
 
 }  // namespace nigiri::loader::hrd
