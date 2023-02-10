@@ -1,10 +1,11 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.9)
 project(nigiri)
 
 include(cmake/buildcache.cmake)
 include(cmake/pkg.cmake)
 
 option(NIGIRI_LINT "Run clang-tidy with the compiler." OFF)
+option(USE_OPENMP "Run clang-tidy with the compiler." ON)
 if(NIGIRI_LINT)
   # clang-tidy will be run on all targets defined hereafter
   include(cmake/clang-tidy.cmake)
@@ -41,7 +42,13 @@ endif()
 file(GLOB_RECURSE nigiri-files src/*.cc)
 add_library(nigiri ${nigiri-files})
 target_include_directories(nigiri PUBLIC include)
-target_link_libraries(nigiri PUBLIC cista geo utl fmt date miniz date-tz wyhash)
+set(LIBS cista geo utl fmt date miniz date-tz wyhash)
+if (USE_OPENMP)
+  add_compile_definitions(NIGIRI_OPENMP)
+  find_package(OpenMP)
+  list(APPEND LIBS OpenMP::OpenMP_CXX)
+endif()
+target_link_libraries(nigiri PUBLIC ${LIBS})
 target_compile_features(nigiri PUBLIC cxx_std_20)
 target_compile_options(nigiri PRIVATE ${nigiri-compile-options})
 
