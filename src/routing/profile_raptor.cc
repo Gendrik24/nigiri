@@ -27,9 +27,13 @@
 #define NIGIRI_PROFILE_RAPTOR_COUNTING
 #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
 #define NIGIRI_PROFILE_COUNT(s) ++stats_.s
+#define NIGIRI_PROFILE_COUNT_BY(s,a) stats_.s += a
 #else
 #define NIGIRI_PROFILE_COUNT(s)
+#define NIGIRI_PROFILE_COUNT_BY(s,a)
 #endif
+
+#define NIGIRI_OPENMP
 
 namespace nigiri::routing {
 
@@ -221,6 +225,26 @@ void profile_raptor::rounds() {
     }
 
     any_marked = false;
+    #ifdef NIGIRI_OPENMP
+    std::size_t routes_visited = 0;
+    #pragma omp parallel default(none) reduction(|| : any_marked) reduction(+ : routes_visited) shared(state_, tt_, k)
+    {
+      for (std::size_t i = 0U; i < tt_.conflict_group_upper_bound.size(); ++i) {
+
+        #pragma omp for
+        for(std::size_t j = (i == 0U) ? 0 : tt_.conflict_group_upper_bound[i-1]; j < tt_.conflict_group_upper_bound[i]; ++j) {
+          const auto route_idx = tt_.ordered_conflict_routes_[j];
+          if (!state_.route_mark_[route_idx.v_]) {
+            continue;
+          }
+          routes_visited++;
+          any_marked |= update_route(k, route_idx);
+        }
+        #pragma omp barrier
+      }
+    }
+    NIGIRI_PROFILE_COUNT_BY(n_routes_visited_, routes_visited);
+    #else
     for (auto r_id = 0U; r_id != tt_.n_routes(); ++r_id) {
       if (!state_.route_mark_[r_id]) {
         continue;
@@ -229,6 +253,7 @@ void profile_raptor::rounds() {
       NIGIRI_PROFILE_COUNT(n_routes_visited_);
       any_marked |= update_route(k, route_idx_t{r_id});
     }
+    #endif
 
     std::fill(begin(state_.route_mark_), end(state_.route_mark_), false);
     if (!any_marked) {
