@@ -537,7 +537,7 @@ void profile_raptor::reconstruct() {
   bmc_raptor_reconstructor reconstructor(tt_, q_, state_, search_interval_);
   reconstructor.reconstruct();
   const auto t2 = std::chrono::steady_clock::now();
-  stats_.time_reconstruction_ += std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
+  stats_.n_reconstruction_time += std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
 }
 
 

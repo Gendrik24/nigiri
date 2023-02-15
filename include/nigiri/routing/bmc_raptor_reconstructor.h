@@ -37,7 +37,7 @@ struct bmc_raptor_reconstructor {
       }
 
       return false;
-    };
+    }
   };
 
   struct departure_comparator {
@@ -47,7 +47,7 @@ struct bmc_raptor_reconstructor {
       }
 
       return false;
-    };
+    }
   };
 
   bmc_raptor_reconstructor() = delete;
