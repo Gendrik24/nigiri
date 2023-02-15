@@ -77,4 +77,6 @@ inline constexpr auto const kInvalidTime = SearchDir == direction::kForward
                                                ? routing_time::max()
                                                : routing_time::min();
 
+using dep_arr_t = std::pair<routing_time, routing_time>;
+
 }  // namespace nigiri::routing

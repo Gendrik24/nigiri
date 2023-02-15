@@ -4,19 +4,17 @@
 #include <algorithm>
 #include <set>
 #include <chrono>
+#include <utility>
 
-#include "nigiri/routing/search_state.h"
+#include "nigiri/routing/bmc_raptor_search_state.h"
+#include "nigiri/routing/bmc_raptor_reconstructor.h"
 #include "nigiri/routing/start_times.h"
-#include "nigiri/routing/raptor_route_label.h"
 #include "nigiri/types.h"
 #include "nigiri/location.h"
 #include "nigiri/timetable.h"
-#include "nigiri/dynamic_bitfield.h"
 #include "nigiri/tracer.h"
 #include "nigiri/special_stations.h"
-#include "nigiri/routing/reconstruct.h"
 #include "nigiri/routing/for_each_meta.h"
-#include "nigiri/location.h"
 
 #include "utl/overloaded.h"
 #include "utl/enumerate.h"
@@ -33,22 +31,24 @@
 #define NIGIRI_PROFILE_COUNT_BY(s,a)
 #endif
 
-#define NIGIRI_OPENMP
+//#define NIGIRI_OPENMP
 
 namespace nigiri::routing {
 
 profile_raptor::profile_raptor(const timetable& tt,
-                               profile_search_state& state,
+                               bmc_raptor_search_state& state,
                                query q)
     : tt_{tt},
       n_tt_days_{static_cast<std::uint16_t>(tt_.date_range_.size().count())},
-      q_(q),
+      q_(std::move(q)),
       search_interval_(q_.start_time_.apply(utl::overloaded{
           [](interval<unixtime_t> const& start_interval) { return start_interval; },
           [this](unixtime_t const start_time) {
             return interval<unixtime_t>{start_time, tt_.end()};
           }})),
-      state_{state}{}
+      state_{state},
+      n_days_to_iterate_{std::min(kMaxTravelTime / 1440U + 1,
+                                  static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())))} {}
 
 day_idx_t profile_raptor::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
@@ -206,7 +206,7 @@ void profile_raptor::rounds() {
       if (state_.station_mark_[to_idx(l_idx)]) {
         #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
           for (const auto& l : state_.round_bags_[k-1][to_idx(l_idx)]) {
-            state_.best_bag_[to_idx(l_idx)].merge(l.label_, l.tdb_);
+            state_.best_bags_[to_idx(l_idx)].merge(l.label_, l.tdb_);
           }
         #endif
         any_marked = true;
@@ -316,7 +316,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       #endif
 
       #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
-      candidate_tdb = state_.best_bag_[l_idx].filter_dominated(candidate_lbl, candidate_tdb);
+      candidate_tdb = state_.best_bags_[l_idx].filter_dominated(candidate_lbl, candidate_tdb);
       #endif
 
       if (candidate_tdb.none()) {
@@ -384,7 +384,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
         #endif
 
         #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
-        tdb = state_.best_bag_[target].filter_dominated(l_with_foot, tdb);
+        tdb = state_.best_bags_[target].filter_dominated(l_with_foot, tdb);
         #endif
 
         if (tdb.none()) {
@@ -413,26 +413,21 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
                                                         unsigned const stop_idx,
                                                         raptor_route_bag& bag) {
   NIGIRI_PROFILE_COUNT(n_earliest_trip_calls_);
-  const auto lbl_dep_time = label.departure_;
-  auto lbl_arr_time = label.arrival_;
+  const auto lbl_arr_offset = (label.arrival_.count() / 1440U);
 
-  auto const n_days_to_iterate =
-      std::min(kMaxTravelTime / 1440U + 1,
-               static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())));
-
-  auto const stop_event_times = tt_.event_times_at_stop(
+  auto const& stop_event_times = tt_.event_times_at_stop(
       r, stop_idx, event_type::kDep);
 
-  for (auto i = day_idx_t::value_t{0U}; i != n_days_to_iterate; ++i) {
-    const auto day = (lbl_arr_time.count() / 1440U) + i;
-    if (!lbl_tdb.any()) {
+  for (auto i = day_idx_t::value_t{0U}; i != n_days_to_iterate_; ++i) {
+    const auto day = lbl_arr_offset + i;
+    if (lbl_tdb.none()) {
       return;
     }
 
     auto const time_range_to_scan = it_range{
         i == 0U ? std::lower_bound(
                       stop_event_times.begin(),
-                      stop_event_times.end(), lbl_arr_time,
+                      stop_event_times.end(), label.arrival_,
                       [&](auto&& a, auto&& b) { return (a % 1440U) < (b % 1440U); }) : stop_event_times.begin(),
         stop_event_times.end()};
 
@@ -442,28 +437,26 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
     auto const base =
         static_cast<unsigned>(&*time_range_to_scan.begin_ - stop_event_times.data());
 
+    auto const preliminary_tdb_bias_shit = to_idx(start_day_offset()) + day;
     for (auto const [t_offset, ev] : utl::enumerate(time_range_to_scan)) {
       auto const ev_mam = minutes_after_midnight_t{
           ev.count() < 1440 ? ev.count() : ev.count() % 1440};
 
-      auto const ev_day_offset = static_cast<day_idx_t::value_t>(
-          ev.count() < 1440
-              ? 0
-              : static_cast<cista::base_t<day_idx_t>>(ev.count() / 1440));
-
-      const auto travel_time_lb = ev_mam + minutes_after_midnight_t{day * 1440U} - lbl_dep_time;
-      if (travel_time_lb.count() > kMaxTravelTime || !lbl_tdb.any()) {
+      const auto travel_time_lb = ev_mam + minutes_after_midnight_t{day * 1440U} - label.departure_;
+      if (travel_time_lb.count() > kMaxTravelTime || lbl_tdb.none()) {
         return;
       }
 
-      auto const t = tt_.route_transport_ranges_[r][base + t_offset];
+      auto const ev_day_offset = static_cast<day_idx_t::value_t>(
+          ev.count() < 1440
+              ? 0
+              : ev.count() / 1440);
 
-      const int trip_tdb_bias_shift = start_day_offset().v_
-                                      - ev_day_offset
-                                      + day;
-      auto trip_traffic_day_bitfield =(trip_tdb_bias_shift >= 0) ?
-                                     tt_.bitfields_[tt_.transport_traffic_days_[t]] >> trip_tdb_bias_shift :
-                                     tt_.bitfields_[tt_.transport_traffic_days_[t]] << std::abs(trip_tdb_bias_shift);
+      auto const& t = tt_.route_transport_ranges_[r][base + t_offset];
+
+      auto const& trip_traffic_day_bitfield = (preliminary_tdb_bias_shit >= ev_day_offset) ?
+                                   tt_.bitfields_[tt_.transport_traffic_days_[t]] >> (preliminary_tdb_bias_shit - ev_day_offset) :
+                                   tt_.bitfields_[tt_.transport_traffic_days_[t]] << (ev_day_offset - preliminary_tdb_bias_shit);
       auto trip_label_traffic_day_bitfield = label_bitfield{};
       truncate_to(trip_traffic_day_bitfield, trip_label_traffic_day_bitfield);
 
@@ -496,7 +489,7 @@ void profile_raptor::force_print_state(const char* comment) {
 
   for (auto l = 0U; l != tt_.n_locations(); ++l) {
     if (!is_special(location_idx_t{l}) && !state_.is_destination_[l] &&
-        state_.best_bag_[l].size() == 0 && empty_rounds(l)) {
+        state_.best_bags_[l].size() == 0 && empty_rounds(l)) {
       continue;
     }
 
@@ -517,7 +510,7 @@ void profile_raptor::force_print_state(const char* comment) {
         "[{}] {:8} [name={:48}, track={:10}, id={:16}]: ",
         state_.is_destination_[l] ? "X" : "_", l, name, track,
         id.substr(0, std::min(std::string_view ::size_type{16U}, id.size())));
-    auto const b = state_.best_bag_[l];
+    auto const b = state_.best_bags_[l];
     if (b.size() == 0) {
       fmt::print("best=_________, round_times: ");
     } else {
@@ -537,142 +530,16 @@ void profile_raptor::force_print_state(const char* comment) {
 
 
 void profile_raptor::reconstruct() {
+  const auto t1 = std::chrono::steady_clock::now();
   state_.results_.resize(
       std::max(state_.results_.size(), state_.destinations_.size()));
 
-  const auto r_max = kMaxTransfers + 1;
-  matrix<std::vector<dep_arr_t>> expanded_round_times =
-      make_flat_matrix<std::vector<dep_arr_t>>(r_max, tt_.n_locations());
-
-  matrix<std::vector<dep_arr_t>::iterator> curr_dep_time_iter =
-      make_flat_matrix<std::vector<dep_arr_t>::iterator>(r_max, tt_.n_locations());
-
-  const auto dep_arr_cmp = [](const dep_arr_t& el1, const dep_arr_t& el2) {
-    // First sort from latest departure to earliest departure
-    if (el1.first > el2.first) {
-      return true;
-    } else if (el1.first < el2.first) {
-      return false;
-    }
-
-    // If same departure sort from earliest arrival to latest
-    if (el1.second < el2.second) {
-      return true;
-    }
-
-    return false;
-  };
-
-  const auto dep_cmp = [](const routing_time& rt1, const routing_time& rt2) {
-    if (rt1 > rt2) {
-      return true;
-    }
-
-    return false;
-  };
-
-  for (auto r = 0U; r < r_max; ++r) {
-    for (auto l = 0U; l < tt_.n_locations(); ++l) {
-      const auto& bag = state_.round_bags_[r][l];
-      auto& ert = expanded_round_times[r][l];
-
-      const auto& uncompressed_labels = bag.uncompress();
-      ert.reserve(uncompressed_labels.size());
-      for (const auto& arr_dep_l : uncompressed_labels) {
-        ert.push_back(dep_arr_t{
-            routing_time{start_day_offset() + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440},
-            routing_time{start_day_offset() + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440}
-        });
-      }
-
-      //1.sort round times here
-      std::sort(ert.begin(), ert.end(), dep_arr_cmp);
-      //2.Initialize iterator to first element
-      curr_dep_time_iter[r][l] = ert.begin();
-    }
-  }
-
-  std::set<routing_time, decltype(dep_cmp)> dep_times(dep_cmp);
-  for (auto l = 0U; l < tt_.n_locations(); ++l) {
-    const auto& dep_arr_times = expanded_round_times[0][l];
-    for (const auto& dat : dep_arr_times) {
-      dep_times.insert(dat.first);
-    }
-  }
-
-  std::vector<routing_time> best_times(tt_.n_locations(), kInvalidTime<direction::kForward>);
-
-  matrix<routing_time> round_times =
-      make_flat_matrix<routing_time>(
-          kMaxTransfers + 1U,
-          tt_.n_locations(),
-          kInvalidTime<direction::kForward>);
-
-  for (const auto& dep_time : dep_times) {
-
-    for (auto r = 0U; r < r_max; ++r) {
-      for (auto l = 0U; l < tt_.n_locations(); ++l) {
-        auto& iter = curr_dep_time_iter[r][l];
-
-        while (iter != expanded_round_times[r][l].end() && iter->first > dep_time) {
-          iter++;
-        }
-
-        if (iter != expanded_round_times[r][l].end() && iter->first == dep_time) {
-          round_times[r][l] = iter->second;
-        }
-      }
-    }
-    for (auto const [i, t] : utl::enumerate(q_.destinations_)) {
-      for (auto const dest : state_.destinations_[i]) {
-        reconstruct_for_destination(
-            i,
-            dest,
-            best_times,
-            round_times,
-            dep_time.to_unixtime(tt_),
-            state_.results_);
-      }
-    }
-
-    std::fill(begin(best_times), end(best_times), kInvalidTime<direction::kForward>);
-    round_times.reset(kInvalidTime<direction::kForward>);
-  }
+  bmc_raptor_reconstructor reconstructor(tt_, q_, state_, search_interval_);
+  reconstructor.reconstruct();
+  const auto t2 = std::chrono::steady_clock::now();
+  stats_.time_reconstruction_ += std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
 }
 
-
-void profile_raptor::reconstruct_for_destination(std::size_t dest_idx,
-                                                 location_idx_t dest,
-                                                 std::vector<routing_time> const& best_times,
-                                                 matrix<routing_time> const& round_times,
-                                                 const unixtime_t start_at_start,
-                                                 std::vector<pareto_set<journey>>& results) {
-  for (auto k = 1U; k != end_k(); ++k) {
-    if (round_times[k][to_idx(dest)] == kInvalidTime<direction::kForward>) {
-      continue;
-    }
-    auto const [optimal, it] = results[dest_idx].add(journey{
-        .legs_ = {},
-        .start_time_ = start_at_start,
-        .dest_time_ = round_times[k][to_idx(dest)].to_unixtime(tt_),
-        .dest_ = dest,
-        .transfers_ = static_cast<std::uint8_t>(k - 1)});
-    if (optimal) {
-      auto const outside_interval =
-          !search_interval_.contains(it->start_time_);
-          if (!outside_interval) {
-            try {
-              reconstruct_journey<direction::kForward>(tt_, q_, *it, best_times, round_times);
-            } catch (std::exception const& e) {
-              results[dest_idx].erase(it);
-              log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
-              print_state("RECONSTRUCT FAILED");
-              fmt::print("Start at {}, Dest time {}, destination {}, transfers {}\n", start_at_start, round_times[k][to_idx(dest)].to_unixtime(tt_), dest, k-1);
-            }
-          }
-    }
-  }
-}
 
 #ifdef NIGIRI_RAPTOR_TRACING
 void profile_raptor::print_state(char const* comment) {

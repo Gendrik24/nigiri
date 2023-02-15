@@ -3,7 +3,6 @@
 #include "nigiri/loader/hrd/load_timetable.h"
 #include "nigiri/routing/raptor.h"
 #include "nigiri/routing/profile_raptor.h"
-#include "nigiri/routing/raptor_label.h"
 
 #include "nigiri/routing/search_state.h"
 

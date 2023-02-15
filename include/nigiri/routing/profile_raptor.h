@@ -2,11 +2,10 @@
 
 #include <vector>
 
+#include "nigiri/routing/bmc_raptor_search_state.h"
 #include "nigiri/routing/query.h"
 #include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/raptor.h"
-#include "nigiri/routing/raptor_label.h"
-#include "nigiri/routing/raptor_route_label.h"
 #include "nigiri/routing/arrival_departure_label.h"
 #include "nigiri/routing/transport_departure_label.h"
 #include "nigiri/routing/bmc_raptor_bag.h"
@@ -25,10 +24,23 @@ using dep_arr_t = std::pair<routing_time, routing_time>;
 using raptor_bag = bmc_raptor_bag<arrival_departure_label>;
 using raptor_route_bag = bmc_raptor_bag<transport_departure_label>;
 
-struct profile_search_state;
+struct bmc_raptor_search_state;
+
+struct bmc_raptor_stats {
+  std::uint64_t n_routing_time_{0ULL};
+  std::uint64_t n_footpaths_visited_{0ULL};
+  std::uint64_t n_routes_visited_{0ULL};
+  std::uint64_t n_earliest_trip_calls_{0ULL};
+  std::uint64_t n_earliest_arrival_updated_by_route_{0ULL};
+  std::uint64_t n_earliest_arrival_updated_by_footpath_{0ULL};
+  std::uint64_t fp_update_prevented_by_lower_bound_{0ULL};
+  std::uint64_t route_update_prevented_by_lower_bound_{0ULL};
+  std::uint64_t lb_time_{0ULL};
+  std::uint64_t n_reconstruction_time{0ULL};
+};
 
 struct profile_raptor {
-  profile_raptor(timetable const& tt, profile_search_state& state, query q);
+  profile_raptor(timetable const& tt, bmc_raptor_search_state& state, query q);
   void init_starts();
   void init_location_with_offset(minutes_after_midnight_t time_to_arrive,
                                  location_idx_t location);
@@ -53,20 +65,15 @@ struct profile_raptor {
   unsigned end_k() const;
 
   void reconstruct();
-  void reconstruct_for_destination(std::size_t dest_idx,
-                                   location_idx_t dest,
-                                   std::vector<routing_time> const& best_times,
-                                   matrix<routing_time> const& round_times,
-                                   const unixtime_t start_at_start,
-                                   std::vector<pareto_set<journey>>& results);
 
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   query q_;
   raptor_bag best_destination_bag;
   interval<unixtime_t> search_interval_;
-  profile_search_state& state_;
-  stats stats_;
+  bmc_raptor_search_state& state_;
+  bmc_raptor_stats stats_;
+  unsigned int n_days_to_iterate_;
 };
 
 }

@@ -2,14 +2,11 @@
 
 #include "nigiri/loader/hrd/load_timetable.h"
 #include "nigiri/routing/profile_raptor.h"
-#include "nigiri/routing/raptor_label.h"
 #include "nigiri/routing/search_state.h"
 #include "nigiri/routing/routing_time.h"
-#include "nigiri/routing/raptor_label.h"
 #include "nigiri/routing/raptor.h"
 
 #include "nigiri/timetable.h"
-#include "nigiri/dynamic_bitfield.h"
 
 #include <chrono>
 
@@ -59,7 +56,7 @@ TEST_CASE("profile-raptor") {
   timetable tt;
   auto const src = source_idx_t{0U};
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
-  auto profile_state = routing::profile_search_state{};
+  auto profile_state = routing::bmc_raptor_search_state{};
   auto state = routing::search_state{};
 
   routing::query q{
