@@ -11,8 +11,8 @@
 #include "nigiri/routing/bmc_raptor_bag.h"
 #include "nigiri/types.h"
 
-#define PROFILE_RAPTOR_GLOBAL_PRUNING
-#define PROFILE_RAPTOR_LOCAL_PRUNING
+#define BMC_RAPTOR_GLOBAL_PRUNING
+#define BMC_RAPTOR_LOCAL_PRUNING
 
 namespace nigiri {
 struct timetable;
@@ -33,14 +33,11 @@ struct bmc_raptor_stats {
   std::uint64_t n_earliest_trip_calls_{0ULL};
   std::uint64_t n_earliest_arrival_updated_by_route_{0ULL};
   std::uint64_t n_earliest_arrival_updated_by_footpath_{0ULL};
-  std::uint64_t fp_update_prevented_by_lower_bound_{0ULL};
-  std::uint64_t route_update_prevented_by_lower_bound_{0ULL};
-  std::uint64_t lb_time_{0ULL};
   std::uint64_t n_reconstruction_time{0ULL};
 };
 
-struct profile_raptor {
-  profile_raptor(timetable const& tt, bmc_raptor_search_state& state, query q);
+struct bmc_raptor {
+  bmc_raptor(timetable const& tt, bmc_raptor_search_state& state, query q);
   void init_starts();
   void init_location_with_offset(minutes_after_midnight_t time_to_arrive,
                                  location_idx_t location);

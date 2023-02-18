@@ -1,10 +1,11 @@
-#include "nigiri/routing/profile_raptor.h"
+#include "nigiri/routing/bmc_raptor.h"
 
 #include <string>
 #include <algorithm>
 #include <set>
 #include <chrono>
 #include <utility>
+#include <array>
 
 #include "nigiri/routing/bmc_raptor_search_state.h"
 #include "nigiri/routing/bmc_raptor_reconstructor.h"
@@ -35,7 +36,7 @@
 
 namespace nigiri::routing {
 
-profile_raptor::profile_raptor(const timetable& tt,
+bmc_raptor::bmc_raptor(const timetable& tt,
                                bmc_raptor_search_state& state,
                                query q)
     : tt_{tt},
@@ -50,20 +51,20 @@ profile_raptor::profile_raptor(const timetable& tt,
       n_days_to_iterate_{std::min(kMaxTravelTime / 1440U + 1,
                                   static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())))} {}
 
-day_idx_t profile_raptor::start_day_offset() const {
+day_idx_t bmc_raptor::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
 }
 
-day_idx_t profile_raptor::number_of_days_in_search_interval() const {
+day_idx_t bmc_raptor::number_of_days_in_search_interval() const {
   return tt_.day_idx_mam(this->search_interval_.to_).first
          - tt_.day_idx_mam(this->search_interval_.from_).first + 1;
 }
 
-unsigned profile_raptor::end_k() const {
+unsigned bmc_raptor::end_k() const {
   return std::min(kMaxTransfers, q_.max_transfers_) + 1U;
 }
 
-void profile_raptor::init_location_with_offset(minutes_after_midnight_t time_to_arrive,
+void bmc_raptor::init_location_with_offset(minutes_after_midnight_t time_to_arrive,
                                                location_idx_t location) {
   for (auto const& r : tt_.location_routes_.at(location)) {
 
@@ -89,18 +90,13 @@ void profile_raptor::init_location_with_offset(minutes_after_midnight_t time_to_
           start_time = (1_days - minutes_after_midnight_t{std::abs(start_time.count()) % 1440});
         }
         const auto at_stop = start_time + time_to_arrive;
-        const int trip_tdb_bias_shift = start_day_offset().v_
-                                        - stop_time_day_offset
-                                        + (at_stop.count() / 1440);
 
-        auto trip_tdb = tt_.bitfields_[tt_.transport_traffic_days_[transport_idx]];
-        if (trip_tdb_bias_shift >= 0) {
-          trip_tdb >>= static_cast<unsigned long>(trip_tdb_bias_shift);
-        } else {
-          trip_tdb <<= static_cast<unsigned long>(std::abs(trip_tdb_bias_shift));
-        }
+        auto const preliminary_tdb_bias_shit = to_idx(start_day_offset()) + (at_stop.count() / 1440);
+        auto const& trip_tdb = (preliminary_tdb_bias_shit >= stop_time_day_offset) ?
+           tt_.bitfields_[tt_.transport_traffic_days_[transport_idx]] >> (preliminary_tdb_bias_shit - stop_time_day_offset) :
+           tt_.bitfields_[tt_.transport_traffic_days_[transport_idx]] << (stop_time_day_offset - preliminary_tdb_bias_shit);
 
-        auto mask = std::string(number_of_days_in_search_interval().v_, '1');
+        auto mask = std::string(to_idx(number_of_days_in_search_interval()), '1');
         const auto dep_lower_limit = search_interval_.from_.time_since_epoch();
         if (start_time < minutes_after_midnight_t{dep_lower_limit.count() % 1440}) {
           mask.back() = '0';
@@ -126,7 +122,7 @@ void profile_raptor::init_location_with_offset(minutes_after_midnight_t time_to_
     auto const first_out_of_interval = search_interval_.to_.time_since_epoch() % 1440;
 
     label_bitfield traffic_day_bitfield{
-        std::string(number_of_days_in_search_interval().v_, '0').replace(0U, 1U, "1"),
+        std::string(to_idx(number_of_days_in_search_interval()), '0').replace(0U, 1U, "1"),
     };
     bool merged = state_.round_bags_[0U][to_idx(location)]
                       .merge(arrival_departure_label{
@@ -136,10 +132,9 @@ void profile_raptor::init_location_with_offset(minutes_after_midnight_t time_to_
 
     state_.station_mark_[to_idx(location)] = merged || state_.station_mark_[to_idx(location)];
   }
-
 }
 
-void profile_raptor::update_destination_bag(unsigned long k) {
+void bmc_raptor::update_destination_bag(unsigned long k) {
   for (auto const dest : state_.destinations_.front()) {
     for (const auto& rl : state_.round_bags_[k-1][to_idx(dest)]) {
       best_destination_bag.merge(rl.label_, rl.tdb_);
@@ -147,7 +142,7 @@ void profile_raptor::update_destination_bag(unsigned long k) {
   }
 }
 
-void profile_raptor::init_starts() {
+void bmc_raptor::init_starts() {
   std::set<location_idx_t> seen;
   for (const auto& o : q_.start_) {
     seen.clear();
@@ -171,7 +166,7 @@ void profile_raptor::init_starts() {
 }
 
 
-void profile_raptor::route() {
+void bmc_raptor::route() {
   state_.reset(tt_);
   state_.search_interval_ = search_interval_;
 
@@ -188,12 +183,12 @@ void profile_raptor::route() {
   }
 }
 
-void profile_raptor::rounds() {
+void bmc_raptor::rounds() {
   print_state();
   for (auto k = 1U; k != end_k(); ++k) {
     trace_always("┊ round k={}\n", k);
 
-    #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+    #ifdef BMC_RAPTOR_GLOBAL_PRUNING
     update_destination_bag(k);
     #endif
 
@@ -204,8 +199,8 @@ void profile_raptor::rounds() {
                       state_.station_mark_.size()); ++l_idx) {
       
       if (state_.station_mark_[to_idx(l_idx)]) {
-        #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
-          for (const auto& l : state_.round_bags_[k-1][to_idx(l_idx)]) {
+        #ifdef BMC_RAPTOR_LOCAL_PRUNING
+        for (const auto& l : state_.round_bags_[k-1][to_idx(l_idx)]) {
             state_.best_bags_[to_idx(l_idx)].merge(l.label_, l.tdb_);
           }
         #endif
@@ -234,7 +229,7 @@ void profile_raptor::rounds() {
         #pragma omp for
         for(std::size_t j = (i == 0U) ? 0 : tt_.conflict_group_upper_bound[i-1]; j < tt_.conflict_group_upper_bound[i]; ++j) {
           const auto route_idx = tt_.ordered_conflict_routes_[j];
-          if (!state_.route_mark_[route_idx.v_]) {
+          if (!state_.route_mark_[to_idx(route_idx)]) {
             continue;
           }
           routes_visited++;
@@ -266,7 +261,7 @@ void profile_raptor::rounds() {
   }
 }
 
-bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
+bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
@@ -297,7 +292,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       const auto new_arr = tt_.event_mam(route_idx,
                                          active_label.label_.transport_.t_idx_,
                                          stop_idx,
-                                         event_type::kArr) + minutes_after_midnight_t{active_label.label_.transport_.day_.v_ * 1440};
+                                         event_type::kArr) + minutes_after_midnight_t{to_idx(active_label.label_.transport_.day_) * 1440};
 
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
@@ -311,11 +306,11 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
         continue;
       }
 
-      #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+      #ifdef BMC_RAPTOR_GLOBAL_PRUNING
       candidate_tdb = best_destination_bag.filter_dominated(candidate_lbl, candidate_tdb);
       #endif
 
-      #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
+      #ifdef BMC_RAPTOR_LOCAL_PRUNING
       candidate_tdb = state_.best_bags_[l_idx].filter_dominated(candidate_lbl, candidate_tdb);
       #endif
 
@@ -350,7 +345,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 }
 
 
-void profile_raptor::update_footpaths(unsigned const k) {
+void bmc_raptor::update_footpaths(unsigned const k) {
   trace("┊ ├ FOOTPATHS\n");
   std::vector<std::vector<cista::pair<arrival_departure_label, label_bitfield>>> buffered_labels{
       tt_.n_locations(), std::vector<cista::pair<arrival_departure_label, label_bitfield>>()};
@@ -379,11 +374,11 @@ void profile_raptor::update_footpaths(unsigned const k) {
 
         auto tdb = rl.tdb_;
 
-        #ifdef PROFILE_RAPTOR_GLOBAL_PRUNING
+        #ifdef BMC_RAPTOR_GLOBAL_PRUNING
         tdb = best_destination_bag.filter_dominated(l_with_foot, tdb);
         #endif
 
-        #ifdef PROFILE_RAPTOR_LOCAL_PRUNING
+        #ifdef BMC_RAPTOR_LOCAL_PRUNING
         tdb = state_.best_bags_[target].filter_dominated(l_with_foot, tdb);
         #endif
 
@@ -407,7 +402,7 @@ void profile_raptor::update_footpaths(unsigned const k) {
 
 }
 
-void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_label label,
+void bmc_raptor::get_earliest_sufficient_transports(const arrival_departure_label label,
                                                         label_bitfield lbl_tdb,
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
@@ -475,7 +470,7 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
   }
 }
 
-void profile_raptor::force_print_state(const char* comment) {
+void bmc_raptor::force_print_state(const char* comment) {
   auto const empty_rounds = [&](std::uint32_t const l) {
     for (auto k = 0U; k != end_k(); ++k) {
       if (state_.round_bags_[k][l].size() != 0) {
@@ -529,7 +524,7 @@ void profile_raptor::force_print_state(const char* comment) {
 }
 
 
-void profile_raptor::reconstruct() {
+void bmc_raptor::reconstruct() {
   const auto t1 = std::chrono::steady_clock::now();
   state_.results_.resize(
       std::max(state_.results_.size(), state_.destinations_.size()));
@@ -537,7 +532,7 @@ void profile_raptor::reconstruct() {
   bmc_raptor_reconstructor reconstructor(tt_, q_, state_, search_interval_);
   reconstructor.reconstruct();
   const auto t2 = std::chrono::steady_clock::now();
-  stats_.n_reconstruction_time += std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
+  stats_.n_reconstruction_time = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
 }
 
 
@@ -546,7 +541,7 @@ void profile_raptor::print_state(char const* comment) {
   force_print_state(comment);
 }
 #else
-void profile_raptor::print_state(char const*) {}
+void bmc_raptor::print_state(char const*) {}
 #endif
 
 }

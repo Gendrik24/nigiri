@@ -1,8 +1,8 @@
 #include "doctest/doctest.h"
 
 #include "nigiri/loader/hrd/load_timetable.h"
+#include "nigiri/routing/bmc_raptor.h"
 #include "nigiri/routing/raptor.h"
-#include "nigiri/routing/profile_raptor.h"
 
 #include "nigiri/routing/search_state.h"
 

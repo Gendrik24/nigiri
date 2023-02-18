@@ -1,10 +1,10 @@
 #include "doctest/doctest.h"
 
 #include "nigiri/loader/hrd/load_timetable.h"
-#include "nigiri/routing/profile_raptor.h"
-#include "nigiri/routing/search_state.h"
-#include "nigiri/routing/routing_time.h"
+#include "nigiri/routing/bmc_raptor.h"
 #include "nigiri/routing/raptor.h"
+#include "nigiri/routing/routing_time.h"
+#include "nigiri/routing/search_state.h"
 
 #include "nigiri/timetable.h"
 
@@ -82,7 +82,7 @@ TEST_CASE("profile-raptor") {
       .extend_interval_earlier_ = false,
       .extend_interval_later_ = false};
 
-  auto fwdp_r = routing::profile_raptor{
+  auto fwdp_r = routing::bmc_raptor{
       tt, profile_state, q};
   fwdp_r.route();
 
