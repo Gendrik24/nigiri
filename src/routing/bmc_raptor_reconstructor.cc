@@ -37,10 +37,7 @@ void bmc_raptor_reconstructor::uncompress_round_bags() {
       const auto& uncompressed_labels = bag.uncompress();
       ert.reserve(uncompressed_labels.size());
       for (const auto& arr_dep_l : uncompressed_labels) {
-        ert.push_back(dep_arr_t{
-            routing_time{first_day_offset + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440},
-            routing_time{first_day_offset + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440}
-        });
+        ert.push_back(arr_dep_l.add_day_offset(to_idx(first_day_offset)));
       }
       std::sort(ert.begin(), ert.end(), departure_arrival_comparator());
       round_time_iters[r][l] = ert.begin();
@@ -52,29 +49,30 @@ void bmc_raptor_reconstructor::get_departure_events() {
   for (auto l = 0U; l < tt_.n_locations(); ++l) {
     const auto& dep_arr_times = round_times_[0][l];
     for (const auto& dat : dep_arr_times) {
-      departure_events_.insert(dat.first);
+      departure_events_.insert(dat.departure_);
     }
   }
 }
 
-routing_time bmc_raptor_reconstructor::get_routing_time(const unsigned long k,
-                                                        const location_idx_t loc,
-                                                        const routing_time departure) {
+std::pair<routing_time, std::optional<reconstruction_leg>> bmc_raptor_reconstructor::get_routing_information(const unsigned long k,
+                                                                                                             const location_idx_t loc,
+                                                                                                             const long_minutes_after_midnight_t departure) {
   auto& iter = round_time_iters[k][to_idx(loc)];
   const auto& dep_arr_times = round_times_[k][to_idx(loc)];
 
-  routing_time routing_time = kInvalidTime<direction::kForward>;
-  while (iter != dep_arr_times.end() && iter->first > departure) {
+  routing_time rt = kInvalidTime<direction::kForward>;
+  while (iter != dep_arr_times.end() && iter->departure_ > departure) {
     iter++;
   }
-  if (iter != dep_arr_times.end() && iter->first == departure) {
-    routing_time = iter->second;
+  if (iter != dep_arr_times.end() && iter->departure_ == departure) {
+    rt = routing_time{iter->arrival_.count()};
+    return {rt, iter->leg_};
   }
-  return routing_time;
+  return {rt, std::nullopt};
 }
 
 std::optional<journey::leg> bmc_raptor_reconstructor::find_start_footpath(journey const& j,
-                                                                          const routing_time departure) {
+                                                                          const long_minutes_after_midnight_t departure) {
   constexpr auto const kFwd = true;
 
   auto const is_better_or_eq = [](auto a, auto b) {
@@ -102,7 +100,7 @@ std::optional<journey::leg> bmc_raptor_reconstructor::find_start_footpath(journe
       kFwd ? tt_.locations_.footpaths_in_[leg_start_location]
            : tt_.locations_.footpaths_out_[leg_start_location];
   auto const j_start_time = routing_time{tt_, j.start_time_};
-  auto const fp_target_time = get_routing_time(0, leg_start_location, departure);
+  auto const fp_target_time = get_routing_information(0, leg_start_location, departure).first;
 
   if (q_.start_match_mode_ == location_match_mode::kIntermodal) {
     for (auto const& o : q_.start_) {
@@ -151,213 +149,89 @@ std::optional<journey::leg> bmc_raptor_reconstructor::find_start_footpath(journe
   throw utl::fail("no valid journey start found");
 }
 
+std::pair<journey::leg, journey::leg> bmc_raptor_reconstructor::get_legs(unsigned const k,
+                                                                         location_idx_t const l,
+                                                                         long_minutes_after_midnight_t departure,
+                                                                         journey& j) {
+
+  auto [arrive_at_l, optional_reconstruction_information] = get_routing_information(k, l, departure);
+  if (!optional_reconstruction_information.has_value()) {
+    utl::fail("ERROR! No reconstruction info is given.");
+  }
+  const auto& rc_info = optional_reconstruction_information.value();
+  auto const& stop_seq = tt_.route_location_seq_[tt_.transport_route_[rc_info.uses_.t_idx_]];
+
+   unsigned int transport_to_stop_idx = std::numeric_limits<unsigned int>::max();
+   auto const n_stops = stop_seq.size() - rc_info.transport_from_stop_idx_;
+   for (auto i = 1U; i != n_stops; ++i) {
+    auto const stop_idx =
+        static_cast<unsigned>(rc_info.transport_from_stop_idx_ + i);
+    auto const stop = timetable::stop{stop_seq[stop_idx]};
+    if (stop.location_idx() == rc_info.transport_to_) {
+      transport_to_stop_idx = stop_idx;
+      break;
+    }
+   }
+
+   if (to_idx(rc_info.uses_.day_) < 0) {
+    utl::fail("ERROR! transport is not valid!");
+   }
+
+   const auto transport_day_idx = day_idx_t{static_cast<uint16_t>(to_idx(rc_info.uses_.day_))};
+   auto const dep_event_from = routing_time{transport_day_idx,
+                                            tt_.event_mam(rc_info.uses_.t_idx_, rc_info.transport_from_stop_idx_, event_type::kDep)};
+
+   auto const arr_event_to = routing_time{transport_day_idx,
+                                          tt_.event_mam(rc_info.uses_.t_idx_, transport_to_stop_idx, event_type::kArr)};
+
+   const auto transport_leg = journey::leg{
+        direction::kForward,
+        rc_info.transport_from_,
+        rc_info.transport_to_,
+        dep_event_from.to_unixtime(tt_),
+        arr_event_to.to_unixtime(tt_),
+        journey::transport_enter_exit{
+          transport{rc_info.uses_.t_idx_, transport_day_idx}, rc_info.transport_from_stop_idx_, transport_to_stop_idx}
+   };
+
+   footpath fp;
+   fp.target_ = l;
+   fp.duration_ = arrive_at_l - arr_event_to;
+
+   if (l == rc_info.transport_to_) {
+    fp.target_ = l;
+    fp.duration_ = (k == j.transfers_ + 1U)
+                       ? 0_minutes
+                       : tt_.locations_.transfer_time_[l];
+
+    arrive_at_l = arr_event_to + fp.duration_;
+   }
+
+   const auto footpath_leg = journey::leg{
+       direction::kForward,
+       rc_info.transport_to_,
+       l,
+       arr_event_to.to_unixtime(tt_),
+       arrive_at_l.to_unixtime(tt_),
+       fp
+   };
+
+
+   if (k == j.transfers_ + 1U) {
+    j.dest_time_ = footpath_leg.arr_time_;
+   }
+
+
+   return {footpath_leg, transport_leg};
+}
+
 void bmc_raptor_reconstructor::reconstruct_journey(journey& j,
-                                                   const routing_time departure_time) {
-
-  constexpr auto const kFwd = true;
-  auto const is_better_or_eq = [](auto a, auto b) {
-    return kFwd ? a <= b : a >= b;
-  };
-
-  auto const find_entry_in_prev_round =
-      [&](unsigned const k, transport const& t, route_idx_t const r,
-          std::size_t const from_stop_idx,
-          routing_time const time) -> std::optional<journey::leg> {
-    auto const& stop_seq = tt_.route_location_seq_[r];
-
-    auto const n_stops =
-        kFwd ? from_stop_idx + 1 : stop_seq.size() - from_stop_idx;
-    for (auto i = 1U; i != n_stops; ++i) {
-      auto const stop_idx =
-          static_cast<unsigned>(kFwd ? from_stop_idx - i : from_stop_idx + i);
-      auto const stop = timetable::stop{stop_seq[stop_idx]};
-      auto const l = stop.location_idx();
-
-      if ((kFwd && !stop.in_allowed()) || (!kFwd && !stop.out_allowed())) {
-        continue;
-      }
-
-      auto const event_time = routing_time{
-          t.day_, tt_.event_mam(t.t_idx_, stop_idx,
-                               kFwd ? event_type::kDep : event_type::kArr)};
-
-      const auto prev_routing_time = get_routing_time(k-1, l, departure_time);
-      if (is_better_or_eq(prev_routing_time, event_time)) {
-        return journey::leg{
-            direction::kForward,
-            timetable::stop{stop_seq[stop_idx]}.location_idx(),
-            timetable::stop{stop_seq[from_stop_idx]}.location_idx(),
-            event_time.to_unixtime(tt_),
-            time.to_unixtime(tt_),
-            journey::transport_enter_exit{
-                t, stop_idx, static_cast<unsigned>(from_stop_idx)}};
-      }
-
-      // special case: first stop with meta stations
-      if (k == 1 && q_.start_match_mode_ == location_match_mode::kEquivalent) {
-        for (auto const& eq : tt_.locations_.equivalences_[l]) {
-          const auto meta_prev_routing_time = get_routing_time(k-1, eq, departure_time);
-          if (is_better_or_eq(meta_prev_routing_time,
-                              event_time)) {
-            return journey::leg{
-                direction::kForward,
-                timetable::stop{stop_seq[stop_idx]}.location_idx(),
-                timetable::stop{stop_seq[from_stop_idx]}.location_idx(),
-                event_time.to_unixtime(tt_),
-                time.to_unixtime(tt_),
-                journey::transport_enter_exit{
-                    t, stop_idx, static_cast<unsigned>(from_stop_idx)}};
-          }
-        }
-      }
-    }
-
-    return std::nullopt;
-  };
-
-  auto const get_route_transport =
-      [&](unsigned const k, routing_time const time, route_idx_t const r,
-          std::size_t const stop_idx) -> std::optional<journey::leg> {
-    for (auto const t : tt_.route_transport_ranges_[r]) {
-      auto const event_mam =
-          tt_.event_mam(t, stop_idx, kFwd ? event_type::kArr : event_type::kDep);
-      if (event_mam.count() % 1440 != time.mam().count()) {
-        continue;
-      }
-
-      auto const day_offset =
-          static_cast<cista::base_t<day_idx_t>>(event_mam.count() / 1440);
-      auto const day = time.day() - day_offset;
-      if (!tt_.bitfields_[tt_.transport_traffic_days_[t]].test(to_idx(day))) {
-        continue;
-      }
-
-      auto leg =
-          find_entry_in_prev_round(k, transport{t, day}, r, stop_idx, time);
-      if (leg.has_value()) {
-        return leg;
-      }
-    }
-    return std::nullopt;
-  };
-
-  auto const get_transport =
-      [&](unsigned const k, location_idx_t const l,
-          routing_time const time) -> std::optional<journey::leg> {
-    for (auto const& r : tt_.location_routes_[l]) {
-      auto const location_seq = tt_.route_location_seq_[r];
-      for (auto const [i, stop] : utl::enumerate(location_seq)) {
-        auto const s = timetable::stop{stop};
-        if (s.location_idx() != l ||  //
-            (kFwd && (i == 0U || !s.out_allowed())) ||
-            (!kFwd && (i == location_seq.size() - 1 || !s.in_allowed()))) {
-          continue;
-        }
-
-        auto leg = get_route_transport(k, time, r, i);
-        if (leg.has_value()) {
-          return leg;
-        }
-      }
-    }
-    return std::nullopt;
-  };
-
-  auto const check_fp = [&](unsigned const k, location_idx_t const l,
-                            routing_time const curr_time, footpath const fp)
-      -> std::optional<std::pair<journey::leg, journey::leg>> {
-    auto const fp_start = curr_time - (kFwd ? fp.duration_ : -fp.duration_);
-
-    auto const transport_leg = get_transport(k, fp.target_, fp_start);
-
-    if (transport_leg.has_value()) {
-      auto const fp_leg = journey::leg{direction::kForward,
-                                       fp.target_,
-                                       l,
-                                       fp_start.to_unixtime(tt_),
-                                       curr_time.to_unixtime(tt_),
-                                       fp};
-      return std::pair{fp_leg, *transport_leg};
-    }
-    return std::nullopt;
-  };
-
-  auto const get_legs =
-      [&](unsigned const k,
-          location_idx_t const l) -> std::pair<journey::leg, journey::leg> {
-    auto const curr_time = get_routing_time(k, l, departure_time);
-    if (q_.dest_match_mode_ == location_match_mode::kIntermodal &&
-        k == j.transfers_ + 1U) {
-      for (auto const& dest_offset : q_.destinations_[0]) {
-        std::optional<std::pair<journey::leg, journey::leg>> ret;
-        for_each_meta(
-            tt_, location_match_mode::kIntermodal, dest_offset.target_,
-            [&](location_idx_t const eq) {
-              auto const transfer_time = tt_.locations_.transfer_time_[eq];
-              auto intermodal_dest = check_fp(
-                  k, l, curr_time, {eq, dest_offset.duration_ + transfer_time});
-              if (intermodal_dest.has_value()) {
-                (kFwd ? intermodal_dest->first.dep_time_ += transfer_time
-                      : intermodal_dest->first.arr_time_ -= transfer_time);
-                intermodal_dest->first.uses_ =
-                    offset{eq, dest_offset.duration_ - transfer_time,
-                           dest_offset.type_};
-                ret = std::move(intermodal_dest);
-              }
-
-              for (auto const& fp : kFwd ? tt_.locations_.footpaths_in_[eq]
-                                         : tt_.locations_.footpaths_out_[eq]) {
-                auto fp_intermodal_dest = check_fp(
-                    k, l, curr_time,
-                    {fp.target_, dest_offset.duration_ + fp.duration_});
-                if (fp_intermodal_dest.has_value()) {
-                  fp_intermodal_dest->first.uses_ = offset{
-                      eq, fp.duration_ - transfer_time, dest_offset.type_};
-                  ret = std::move(fp_intermodal_dest);
-                }
-              }
-            });
-        if (ret.has_value()) {
-          return std::move(*ret);
-        }
-      }
-
-      throw utl::fail(
-          "intermodal destination reconstruction failed at k={}, t={}, "
-          "stop=(name={}, id={}), time={}",
-          k, j.transfers_, tt_.locations_.names_[l].view(),
-          tt_.locations_.ids_[l].view(), curr_time);
-    }
-
-    auto transfer_at_same_stop =
-        check_fp(k, l, curr_time,
-                 footpath{l, (k == j.transfers_ + 1U)
-                                 ? 0_minutes
-                                 : tt_.locations_.transfer_time_[l]});
-    if (transfer_at_same_stop.has_value()) {
-      return std::move(*transfer_at_same_stop);
-    }
-
-    auto const fps =
-        kFwd ? tt_.locations_.footpaths_in_[l] : tt_.locations_.footpaths_out_[l];
-    for (auto const& fp : fps) {
-      auto fp_legs = check_fp(k, l, curr_time, fp);
-      if (fp_legs.has_value()) {
-        return std::move(*fp_legs);
-      }
-    }
-
-    throw utl::fail(
-        "reconstruction failed at k={}, t={}, stop=(name={}, id={}), time={}",
-        k, j.transfers_, tt_.locations_.names_[l].view(),
-        tt_.locations_.ids_[l].view(), curr_time);
-  };
-
+                                                   const long_minutes_after_midnight_t departure_time) {
   auto l = j.dest_;
   for (auto i = 0U; i <= j.transfers_; ++i) {
     auto const k = j.transfers_ + 1 - i;
-    auto [fp_leg, transport_leg] = get_legs(k, l);
-    l = kFwd ? transport_leg.from_ : transport_leg.to_;
+    auto [fp_leg, transport_leg] = get_legs(k, l, departure_time, j);
+    l = transport_leg.from_;
     j.add(std::move(fp_leg));
     j.add(std::move(transport_leg));
   }
@@ -367,24 +241,22 @@ void bmc_raptor_reconstructor::reconstruct_journey(journey& j,
     j.add(std::move(*init_fp));
   }
 
-  if constexpr (kFwd) {
-    std::reverse(begin(j.legs_), end(j.legs_));
-  }
+  std::reverse(begin(j.legs_), end(j.legs_));
 }
 
 void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
                                                            location_idx_t dest,
-                                                           const routing_time departure_time) {
+                                                           const long_minutes_after_midnight_t departure_time) {
   for (auto k = 1U; k != n_rounds_; ++k) {
     auto& dest_iter = round_time_iters[k][to_idx(dest)];
     const auto& dest_dep_arr_events = round_times_[k][to_idx(dest)];
 
     routing_time dest_time = kInvalidTime<direction::kForward>;
-    while (dest_iter != dest_dep_arr_events.end() && dest_iter->first > departure_time) {
+    while (dest_iter != dest_dep_arr_events.end() && dest_iter->departure_ > departure_time) {
       dest_iter++;
     }
-    if (dest_iter != dest_dep_arr_events.end() && dest_iter->first == departure_time) {
-      dest_time = dest_iter->second;
+    if (dest_iter != dest_dep_arr_events.end() && dest_iter->departure_ == departure_time) {
+      dest_time = routing_time{dest_iter->arrival_.count()};
     }
 
     if (dest_time == kInvalidTime<direction::kForward>) {
@@ -393,7 +265,7 @@ void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
 
     auto const [optimal, it] = state_.results_[dest_idx].add(journey{
         .legs_ = {},
-        .start_time_ = departure_time.to_unixtime(tt_),
+        .start_time_ = routing_time(departure_time.count()).to_unixtime(tt_),
         .dest_time_ = dest_time.to_unixtime(tt_),
         .dest_ = dest,
         .transfers_ = static_cast<std::uint8_t>(k - 1)});

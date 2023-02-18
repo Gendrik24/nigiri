@@ -55,6 +55,7 @@ struct profile_raptor {
                                           label_bitfield lbl_tdb,
                                           route_idx_t const r,
                                           unsigned const stop_idx,
+                                          const location_idx_t l,
                                           raptor_route_bag& bag);
 
   void force_print_state(char const* comment = "");

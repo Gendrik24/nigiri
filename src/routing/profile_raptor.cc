@@ -286,7 +286,6 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     trace(
         "┊ │    Update arrival times of labels in route bag:\n");
     auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
-    auto const is_destination = state_.is_destination_[l_idx];
     for (const auto& active_label : r_b) {
       if (active_label.label_.transport_.t_idx_ == transport_idx_t::invalid()) {
         trace(
@@ -302,12 +301,20 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
           active_label.to_string(), active_label.t_, new_arr, new_arr);
+      reconstruction_leg rec_leg;
+      rec_leg.uses_ = active_label.label_.transport_;
+      rec_leg.transport_from_ = active_label.label_.entered_at_;
+      rec_leg.transport_from_stop_idx_ = active_label.label_.entered_at_idx_;
+      rec_leg.transport_to_ = stop.location_idx();
+
       const auto candidate_lbl = arrival_departure_label{
-          new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
-          active_label.label_.departure_};
+          new_arr + transfer_time_offset,
+          active_label.label_.departure_,
+          rec_leg};
+
       auto candidate_tdb = active_label.tdb_;
 
-      if (!stop.out_allowed() || (candidate_lbl.arrival_ - candidate_lbl.departure_).count() > kMaxTravelTime) {
+      if (!stop.out_allowed() || candidate_lbl.get_travel_time().count() > kMaxTravelTime) {
         continue;
       }
 
@@ -342,7 +349,7 @@ bool profile_raptor::update_route(unsigned const k, route_idx_t route_idx) {
           "┊ │    Assign trips to labels from prev round:\n");
       for (const auto& l : state_.round_bags_[k-1][cista::to_idx(l_idx)]) {
         trace("┊ │    ├ search for transports serving label={}\n", l.to_string());
-        get_earliest_sufficient_transports(l.label_,l.tdb_, route_idx, stop_idx, r_b);
+        get_earliest_sufficient_transports(l.label_,l.tdb_, route_idx, stop_idx, stop.location_idx(), r_b);
       }
     }
   }
@@ -366,14 +373,16 @@ void profile_raptor::update_footpaths(unsigned const k) {
     for (auto const& fp : fps) {
       NIGIRI_PROFILE_COUNT(n_footpaths_visited_);
       auto const target = to_idx(fp.target_);
-      auto const fp_offset = fp.duration_ - ((state_.is_destination_[to_idx(l_idx)]) ? minutes_after_midnight_t::zero() : tt_.locations_.transfer_time_[l_idx]);
+      auto const fp_offset = fp.duration_ - tt_.locations_.transfer_time_[l_idx];
       trace("┊ │    ├ Footpath of duration {} to target {} merging {} labels\n", fp_offset, location{tt_, fp.target_}, round_bag.size());
       for (const auto & rl : round_bag) {
         const arrival_departure_label l_with_foot{
-          rl.label_.arrival_ + fp_offset,
-              rl.label_.departure_};
+              rl.label_.arrival_ + fp_offset,
+              rl.label_.departure_,
+              rl.label_.leg_};
 
-        if ((l_with_foot.arrival_-l_with_foot.departure_).count() > kMaxTravelTime) {
+
+        if (l_with_foot.get_travel_time().count() > kMaxTravelTime) {
           continue;
         }
 
@@ -411,6 +420,7 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
                                                         label_bitfield lbl_tdb,
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
+                                                        const location_idx_t l,
                                                         raptor_route_bag& bag) {
   NIGIRI_PROFILE_COUNT(n_earliest_trip_calls_);
   const auto lbl_arr_offset = (label.arrival_.count() / 1440U);
@@ -465,8 +475,10 @@ void profile_raptor::get_earliest_sufficient_transports(const arrival_departure_
       const auto new_td_bitfield = lbl_tdb & (~trip_label_traffic_day_bitfield);
       if ((new_td_bitfield ^ lbl_tdb).any()) {
         bag.merge(transport_departure_label{
-            relative_transport{t, relative_day_idx_t{day - ev_day_offset}},
-            label.departure_},
+                  relative_transport{t, relative_day_idx_t{day - ev_day_offset}},
+                  label.departure_,
+                  l,
+                  stop_idx},
             lbl_tdb & trip_label_traffic_day_bitfield
         );
         lbl_tdb = new_td_bitfield;

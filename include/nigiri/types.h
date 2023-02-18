@@ -39,7 +39,7 @@ using bitset = cista::bitset<Size>;
 constexpr auto const kMaxDays = 512;
 using bitfield = bitset<kMaxDays>;
 
-constexpr auto const kMaxSearchDays = 32;
+constexpr auto const kMaxSearchDays = 64;
 using label_bitfield = bitset<kMaxSearchDays>;
 
 using bitvec = cista::offset::bitvec;
@@ -161,6 +161,14 @@ struct relative_transport {
   constexpr bool is_valid() const { return day_ != relative_day_idx_t::invalid(); }
   transport_idx_t t_idx_{transport_idx_t::invalid()};
   relative_day_idx_t day_{relative_day_idx_t::invalid()};
+};
+
+struct reconstruction_leg {
+
+  location_idx_t transport_from_;
+  unsigned int transport_from_stop_idx_;
+  relative_transport uses_;
+  location_idx_t transport_to_;
 };
 
 using i32_minutes = std::chrono::duration<std::int32_t, std::ratio<60>>;
