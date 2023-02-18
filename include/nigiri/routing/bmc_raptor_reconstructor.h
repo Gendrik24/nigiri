@@ -6,8 +6,8 @@
 
 #include "nigiri/types.h"
 #include "nigiri/routing/routing_time.h"
+#include "nigiri/types.h"
 #include "nigiri/routing/journey.h"
-#include "nigiri/routing/arrival_departure_label.h"
 
 namespace nigiri {
 struct timetable;
@@ -19,20 +19,20 @@ struct query;
 struct bmc_raptor_search_state;
 struct journey;
 
-using uncompressed_round_times_t = std::vector<arrival_departure_label>;
-using uncompressed_round_time_iterator = std::vector<arrival_departure_label>::iterator;
+using uncompressed_round_times_t = std::vector<dep_arr_t>;
+using uncompressed_round_time_iterator = std::vector<dep_arr_t>::iterator;
 
 struct bmc_raptor_reconstructor {
 
   struct departure_arrival_comparator {
-    bool operator() (const arrival_departure_label& el1, const arrival_departure_label& el2) const {
-      if (el1.departure_ > el2.departure_) {
+    bool operator() (const dep_arr_t& el1, const dep_arr_t& el2) const {
+      if (el1.first > el2.first) {
         return true;
-      } else if (el1.departure_ < el2.departure_) {
+      } else if (el1.first < el2.first) {
         return false;
       }
 
-      if (el1.arrival_ < el2.arrival_) {
+      if (el1.second < el2.second) {
         return true;
       }
 
@@ -41,7 +41,7 @@ struct bmc_raptor_reconstructor {
   };
 
   struct departure_comparator {
-    bool operator() (const long_minutes_after_midnight_t & rt1, const long_minutes_after_midnight_t & rt2) const {
+    bool operator() (const routing_time& rt1, const routing_time& rt2) const {
       if (rt1 > rt2) {
         return true;
       }
@@ -60,26 +60,20 @@ struct bmc_raptor_reconstructor {
   void reconstruct();
 
 private:
-  std::pair<routing_time, std::optional<reconstruction_leg>> get_routing_information(const unsigned long k,
-                                                                                     const location_idx_t loc,
-                                                                                     long_minutes_after_midnight_t departure);
-
-  std::pair<journey::leg, journey::leg> get_legs(unsigned const k,
-                                                 location_idx_t const l,
-                                                 long_minutes_after_midnight_t departure,
-                                                 journey& j);
-
+  routing_time get_routing_time(const unsigned long k,
+                                const location_idx_t loc,
+                                const routing_time departure);
   void uncompress_round_bags();
   void get_departure_events();
   void reconstruct_for_destination(std::size_t dest_idx,
                                    location_idx_t dest,
-                                   const long_minutes_after_midnight_t departure_time);
+                                   const routing_time departure_time);
 
   void reconstruct_journey(journey& j,
-                           const long_minutes_after_midnight_t departure_time);
+                           const routing_time departure_time);
 
   std::optional<journey::leg> find_start_footpath(journey const& j,
-                                                  const long_minutes_after_midnight_t departure);
+                                                  const routing_time departure);
 
   timetable const& tt_;
   query const& q_;
@@ -88,7 +82,7 @@ private:
   const interval<unixtime_t> search_interval_;
   matrix<uncompressed_round_times_t> round_times_;
   matrix<uncompressed_round_time_iterator> round_time_iters;
-  std::set<long_minutes_after_midnight_t , departure_comparator> departure_events_;
+  std::set<routing_time, departure_comparator> departure_events_;
 };
 
 }  // namespace nigiri::routing
