@@ -7,6 +7,7 @@
 #include <utility>
 #include <array>
 
+#include "nigiri/routing/dijkstra.h"
 #include "nigiri/routing/bmc_raptor_search_state.h"
 #include "nigiri/routing/bmc_raptor_reconstructor.h"
 #include "nigiri/routing/start_times.h"
@@ -20,6 +21,7 @@
 #include "utl/overloaded.h"
 #include "utl/enumerate.h"
 #include "utl/erase_if.h"
+#include "utl/timing.h"
 
 #include "fmt/core.h"
 
@@ -31,8 +33,6 @@
 #define NIGIRI_PROFILE_COUNT(s)
 #define NIGIRI_PROFILE_COUNT_BY(s,a)
 #endif
-
-//#define NIGIRI_OPENMP
 
 namespace nigiri::routing {
 
@@ -173,6 +173,26 @@ void bmc_raptor::route() {
   collect_destinations(tt_, q_.destinations_, q_.dest_match_mode_,
                        state_.destinations_, state_.is_destination_);
   init_starts();
+  #ifdef BMC_RAPTOR_LOWER_BOUNDS
+
+  #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
+  UTL_START_TIMING(lb);
+  #endif
+
+  dijkstra(tt_, q_, tt_.fwd_search_lb_graph_,
+           state_.travel_time_lower_bound_);
+  for (auto l = location_idx_t{0U}; l != tt_.locations_.children_.size(); ++l) {
+    auto const lb = state_.travel_time_lower_bound_[to_idx(l)];
+    for (auto const c : tt_.locations_.children_[l]) {
+      state_.travel_time_lower_bound_[to_idx(c)] = lb;
+    }
+  }
+
+  #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
+  UTL_STOP_TIMING(lb);
+  stats_.lb_time_ = static_cast<std::uint64_t>(UTL_TIMING_MS(lb));
+  #endif
+  #endif
   rounds();
   reconstruct();
   for (auto& r : state_.results_) {
@@ -308,15 +328,37 @@ bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
       #ifdef BMC_RAPTOR_GLOBAL_PRUNING
       candidate_tdb = best_destination_bag.filter_dominated(candidate_lbl, candidate_tdb);
+      if (candidate_tdb.none()) {
+        continue;
+      }
       #endif
 
       #ifdef BMC_RAPTOR_LOCAL_PRUNING
       candidate_tdb = state_.best_bags_[l_idx].filter_dominated(candidate_lbl, candidate_tdb);
-      #endif
-
       if (candidate_tdb.none()) {
         continue;
       }
+      #endif
+
+      #ifdef BMC_RAPTOR_LOWER_BOUNDS
+      auto const lower_bound =
+          state_.travel_time_lower_bound_[to_idx(stop.location_idx())];
+      if (lower_bound.count() ==
+          std::numeric_limits<duration_t::rep>::max()) {
+        NIGIRI_PROFILE_COUNT(route_update_prevented_by_lower_bound_);
+        continue;
+      }
+
+      candidate_tdb = best_destination_bag.filter_dominated(arrival_departure_label{
+                                                                new_arr + lower_bound,
+                                                                active_label.label_.departure_
+                                                            }, candidate_tdb);
+
+      if (candidate_tdb.none()) {
+        NIGIRI_PROFILE_COUNT(route_update_prevented_by_lower_bound_);
+        continue;
+      }
+      #endif
 
       if (state_.round_bags_[k][cista::to_idx(l_idx)].merge(candidate_lbl, candidate_tdb)) {
         trace("┊ │    │ label={}, not dominated -> new best bag label!\n", rl.to_string());
@@ -376,15 +418,37 @@ void bmc_raptor::update_footpaths(unsigned const k) {
 
         #ifdef BMC_RAPTOR_GLOBAL_PRUNING
         tdb = best_destination_bag.filter_dominated(l_with_foot, tdb);
+        if (tdb.none()) {
+          continue;
+        }
         #endif
 
         #ifdef BMC_RAPTOR_LOCAL_PRUNING
         tdb = state_.best_bags_[target].filter_dominated(l_with_foot, tdb);
-        #endif
-
         if (tdb.none()) {
           continue;
         }
+        #endif
+
+        #ifdef BMC_RAPTOR_LOWER_BOUNDS
+        auto const lower_bound =
+            state_.travel_time_lower_bound_[target];
+        if (lower_bound.count() ==
+            std::numeric_limits<duration_t::rep>::max()) {
+          NIGIRI_PROFILE_COUNT(fp_update_prevented_by_lower_bound_);
+          continue;
+        }
+
+        tdb = best_destination_bag.filter_dominated(arrival_departure_label{
+                                                        rl.label_.arrival_ + fp_offset + lower_bound,
+                                                        rl.label_.departure_
+                                                    }, tdb);
+
+        if (tdb.none()) {
+          NIGIRI_PROFILE_COUNT(fp_update_prevented_by_lower_bound_);
+          continue;
+        }
+        #endif
 
         buffered_labels[target].push_back({l_with_foot, tdb});
       }
@@ -525,14 +589,20 @@ void bmc_raptor::force_print_state(const char* comment) {
 
 
 void bmc_raptor::reconstruct() {
-  const auto t1 = std::chrono::steady_clock::now();
   state_.results_.resize(
       std::max(state_.results_.size(), state_.destinations_.size()));
 
+  #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
+  UTL_START_TIMING(rc);
+  #endif
+
   bmc_raptor_reconstructor reconstructor(tt_, q_, state_, search_interval_);
   reconstructor.reconstruct();
-  const auto t2 = std::chrono::steady_clock::now();
-  stats_.n_reconstruction_time = std::chrono::duration_cast<std::chrono::milliseconds>(t2-t1).count();
+
+  #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING
+  UTL_STOP_TIMING(rc);
+  stats_.n_reconstruction_time = static_cast<std::uint64_t>(UTL_TIMING_MS(rc));
+  #endif
 }
 
 

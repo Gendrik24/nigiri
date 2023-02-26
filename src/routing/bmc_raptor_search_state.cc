@@ -26,6 +26,10 @@ void bmc_raptor_search_state::reset(const timetable& tt) {
   round_bags_.resize(kMaxTransfers + 1U, tt.n_locations());
   round_bags_.reset(bmc_raptor_bag<arrival_departure_label>());
 
+  travel_time_lower_bound_.resize(tt.n_locations());
+  std::fill(begin(travel_time_lower_bound_), end(travel_time_lower_bound_),
+            duration_t{0});
+
   destinations_.clear();
   results_.clear();
 }

@@ -31,6 +31,7 @@ struct bmc_raptor_search_state {
   std::vector<std::set<location_idx_t>> destinations_;
   std::vector<pareto_set<journey>> results_;
   interval<unixtime_t> search_interval_;
+  std::vector<duration_t> travel_time_lower_bound_;
 };
 
 }  // namespace nigiri::routing
