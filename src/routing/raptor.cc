@@ -704,7 +704,7 @@ void raptor<SearchDir, IntermodalTarget>::route() {
 
         #ifdef NIGIRI_RAPTOR_COUNTING
               UTL_STOP_TIMING(rc);
-              stats_.n_reconstruction_time = static_cast<std::uint64_t>(UTL_TIMING_MS(rc));
+              stats_.n_reconstruction_time += static_cast<std::uint64_t>(UTL_TIMING_MS(rc));
         #endif
       });
   if (holds_alternative<interval<unixtime_t>>(q_.start_time_)) {
