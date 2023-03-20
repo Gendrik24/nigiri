@@ -23,6 +23,7 @@ struct stats {
   std::uint64_t fp_update_prevented_by_lower_bound_{0ULL};
   std::uint64_t route_update_prevented_by_lower_bound_{0ULL};
   std::uint64_t lb_time_{0ULL};
+  std::uint64_t n_reconstruction_time{0ULL};
 };
 
 template <direction SearchDir, bool IntermodalTarget>
