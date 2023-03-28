@@ -104,7 +104,7 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
     location_idx_t const l_idx) {
   NIGIRI_COUNT(n_earliest_trip_calls_);
 
-  auto const time = state_.round_times_[k - 1][to_idx(l_idx)];
+  auto time = state_.round_times_[k - 1][to_idx(l_idx)];
   if (time == kInvalidTime<SearchDir>) {
     trace("┊ │    et: location=(name={}, id={}, idx={}) => NOT REACHABLE\n",
           tt_.locations_.names_[l_idx].view(),
@@ -112,6 +112,9 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
     return {transport_idx_t::invalid(), day_idx_t::invalid()};
   }
 
+  if (state_.is_destination_[to_idx(l_idx)]) {
+    time = time + tt_.locations_.transfer_time_[l_idx];
+  }
   auto const [day_at_stop, mam_at_stop] = time.day_idx_mam();
 
   auto const n_days_to_iterate =
@@ -159,7 +162,6 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
       auto const ev_mam = minutes_after_midnight_t{
           ev.count() < 1440 ? ev.count() : ev.count() % 1440};
 
-      #ifdef NIGIRI_RAPTOR_GLOBAL_PRUNING
       if (is_better_or_eq(time_at_destination_, routing_time{day, ev_mam})) {
         trace(
             "┊ │      => transport={}, name={}, day={}/{}, best_mam={}, "
@@ -171,7 +173,6 @@ transport raptor<SearchDir, IntermodalTarget>::get_earliest_transport(
             time_at_destination_);
         return {transport_idx_t::invalid(), day_idx_t::invalid()};
       }
-      #endif
 
       auto const t = tt_.route_transport_ranges_[r][base + t_offset];
       if (day == day_at_stop && !is_better_or_eq(mam_at_stop, ev_mam)) {
@@ -422,13 +423,14 @@ void raptor<SearchDir, IntermodalTarget>::update_footpaths(unsigned const k) {
     for (auto const& fp : fps) {
       NIGIRI_COUNT(n_footpaths_visited_);
 
+      auto const is_destination = state_.is_destination_[to_idx(l_idx)];
       auto const target = to_idx(fp.target_);
       auto const min =
           std::min(state_.best_[target], state_.round_times_[k][target]);
       auto const fp_target_time =
           state_.best_[to_idx(l_idx)]  //
           + ((kFwd ? 1 : -1) * fp.duration_)  //
-          - ((kFwd ? 1 : -1) * tt_.locations_.transfer_time_[l_idx]);
+          - ((kFwd ? 1 : -1) * (!is_destination ? tt_.locations_.transfer_time_[l_idx] : 0_minutes));
 
       if (is_better(fp_target_time, min) &&
           is_better(fp_target_time, time_at_destination_)) {
@@ -692,10 +694,10 @@ void raptor<SearchDir, IntermodalTarget>::route() {
           state_.best_[to_idx(s.stop_)] = {tt_, s.time_at_stop_};
           state_.station_mark_[to_idx(s.stop_)] = true;
         }
-        #ifdef NIGIRI_RAPTOR_GLOBAL_PRUNING
+
         time_at_destination_ = routing_time{tt_, from_it->time_at_stop_} +
                                (kFwd ? 1 : -1) * duration_t{kMaxTravelTime};
-        #endif
+
         rounds();
         #ifdef NIGIRI_RAPTOR_COUNTING
                 UTL_START_TIMING(rc);
