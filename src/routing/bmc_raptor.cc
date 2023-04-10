@@ -7,16 +7,16 @@
 #include <utility>
 #include <array>
 
-#include "nigiri/routing/dijkstra.h"
-#include "nigiri/routing/bmc_raptor_search_state.h"
-#include "nigiri/routing/bmc_raptor_reconstructor.h"
-#include "nigiri/routing/start_times.h"
-#include "nigiri/types.h"
 #include "nigiri/location.h"
+#include "nigiri/routing/bmc_raptor_search_state.h"
+#include "nigiri/routing/dijkstra.h"
+#include "nigiri/routing/for_each_meta.h"
+#include "nigiri/routing/mc_raptor_reconstructor.h"
+#include "nigiri/routing/start_times.h"
+#include "nigiri/special_stations.h"
 #include "nigiri/timetable.h"
 #include "nigiri/tracer.h"
-#include "nigiri/special_stations.h"
-#include "nigiri/routing/for_each_meta.h"
+#include "nigiri/types.h"
 
 #include "utl/overloaded.h"
 #include "utl/enumerate.h"
@@ -596,7 +596,34 @@ void bmc_raptor::reconstruct() {
   UTL_START_TIMING(rc);
   #endif
 
-  bmc_raptor_reconstructor reconstructor(tt_, q_, state_, search_interval_);
+  matrix<uncompressed_round_times_t> round_times =
+      make_flat_matrix<uncompressed_round_times_t>(end_k(), tt_.n_locations());
+
+  const auto first_day_offset =
+      tt_.day_idx_mam(search_interval_.from_).first;
+
+  for (auto r = 0U; r < end_k(); ++r) {
+    for (auto l = 0U; l < tt_.n_locations(); ++l) {
+      const auto& bag = state_.round_bags_[r][l];
+      auto& ert = round_times[r][l];
+
+      const auto& uncompressed_labels = bag.uncompress();
+      ert.reserve(uncompressed_labels.size());
+      for (const auto& arr_dep_l : uncompressed_labels) {
+        ert.push_back(mc_raptor_label{
+            routing_time{first_day_offset + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440},
+            routing_time{first_day_offset + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440}
+        });
+      }
+    }
+  }
+
+  mc_raptor_reconstructor reconstructor(tt_,
+                                        q_,
+                                        round_times,
+                                        search_interval_,
+                                        state_.destinations_,
+                                        state_.results_);
   reconstructor.reconstruct();
 
   #ifdef NIGIRI_PROFILE_RAPTOR_COUNTING

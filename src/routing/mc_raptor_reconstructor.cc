@@ -1,4 +1,4 @@
-#include "nigiri/routing/bmc_raptor_reconstructor.h"
+#include "nigiri/routing/mc_raptor_reconstructor.h"
 
 #include <set>
 
@@ -13,67 +13,58 @@
 
 namespace nigiri::routing {
 
-bmc_raptor_reconstructor::bmc_raptor_reconstructor(const timetable& tt,
-                                                   const query& q,
-                                                   bmc_raptor_search_state& state,
-                                                   interval<unixtime_t> search_interval)
+mc_raptor_reconstructor::mc_raptor_reconstructor(const timetable& tt,
+                                                 const query& q,
+                                                 matrix<uncompressed_round_times_t>& round_times,
+                                                 interval<unixtime_t> search_interval,
+                                                 std::vector<std::set<location_idx_t>> const& destinations,
+                                                 std::vector<pareto_set<journey>>& results)
       : tt_{tt},
         q_{q},
-        state_{state},
         n_rounds_{std::min(kMaxTransfers, q_.max_transfers_) + 1U},
         search_interval_(search_interval),
-        round_times_(make_flat_matrix<uncompressed_round_times_t>(n_rounds_, tt_.n_locations())),
-        round_time_iters(make_flat_matrix<uncompressed_round_time_iterator>(n_rounds_, tt_.n_locations())) {}
+        round_times_(round_times),
+        round_time_iters(make_flat_matrix<uncompressed_round_time_iterator>(n_rounds_, tt_.n_locations())),
+        destinations_(destinations),
+        results_(results){}
 
-void bmc_raptor_reconstructor::uncompress_round_bags() {
-  const auto first_day_offset =
-      tt_.day_idx_mam(search_interval_.from_).first;
-
+void mc_raptor_reconstructor::init() {
   for (auto r = 0U; r < n_rounds_; ++r) {
     for (auto l = 0U; l < tt_.n_locations(); ++l) {
-      const auto& bag = state_.round_bags_[r][l];
       auto& ert = round_times_[r][l];
 
-      const auto& uncompressed_labels = bag.uncompress();
-      ert.reserve(uncompressed_labels.size());
-      for (const auto& arr_dep_l : uncompressed_labels) {
-        ert.push_back(dep_arr_t{
-            routing_time{first_day_offset + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440},
-            routing_time{first_day_offset + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440}
-        });
-      }
       std::sort(ert.begin(), ert.end(), departure_arrival_comparator());
       round_time_iters[r][l] = ert.begin();
     }
   }
 }
 
-void bmc_raptor_reconstructor::get_departure_events() {
+void mc_raptor_reconstructor::get_departure_events() {
   for (auto l = 0U; l < tt_.n_locations(); ++l) {
     const auto& dep_arr_times = round_times_[0][l];
     for (const auto& dat : dep_arr_times) {
-      departure_events_.insert(dat.first);
+      departure_events_.insert(dat.departure_);
     }
   }
 }
 
-routing_time bmc_raptor_reconstructor::get_routing_time(const unsigned long k,
+routing_time mc_raptor_reconstructor::get_routing_time(const unsigned long k,
                                                         const location_idx_t loc,
                                                         const routing_time departure) {
   auto& iter = round_time_iters[k][to_idx(loc)];
   const auto& dep_arr_times = round_times_[k][to_idx(loc)];
 
   routing_time routing_time = kInvalidTime<direction::kForward>;
-  while (iter != dep_arr_times.end() && iter->first > departure) {
+  while (iter != dep_arr_times.end() && iter->departure_ > departure) {
     iter++;
   }
-  if (iter != dep_arr_times.end() && iter->first == departure) {
-    routing_time = iter->second;
+  if (iter != dep_arr_times.end() && iter->departure_ == departure) {
+    routing_time = iter->arrival_;
   }
   return routing_time;
 }
 
-std::optional<journey::leg> bmc_raptor_reconstructor::find_start_footpath(journey const& j,
+std::optional<journey::leg> mc_raptor_reconstructor::find_start_footpath(journey const& j,
                                                                           const routing_time departure) {
   constexpr auto const kFwd = true;
 
@@ -151,7 +142,7 @@ std::optional<journey::leg> bmc_raptor_reconstructor::find_start_footpath(journe
   throw utl::fail("no valid journey start found");
 }
 
-void bmc_raptor_reconstructor::reconstruct_journey(journey& j,
+void mc_raptor_reconstructor::reconstruct_journey(journey& j,
                                                    const routing_time departure_time) {
 
   constexpr auto const kFwd = true;
@@ -372,7 +363,7 @@ void bmc_raptor_reconstructor::reconstruct_journey(journey& j,
   }
 }
 
-void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
+void mc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
                                                            location_idx_t dest,
                                                            const routing_time departure_time) {
   for (auto k = 1U; k != n_rounds_; ++k) {
@@ -380,18 +371,18 @@ void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
     const auto& dest_dep_arr_events = round_times_[k][to_idx(dest)];
 
     routing_time dest_time = kInvalidTime<direction::kForward>;
-    while (dest_iter != dest_dep_arr_events.end() && dest_iter->first > departure_time) {
+    while (dest_iter != dest_dep_arr_events.end() && dest_iter->departure_ > departure_time) {
       dest_iter++;
     }
-    if (dest_iter != dest_dep_arr_events.end() && dest_iter->first == departure_time) {
-      dest_time = dest_iter->second;
+    if (dest_iter != dest_dep_arr_events.end() && dest_iter->departure_ == departure_time) {
+      dest_time = dest_iter->arrival_;
     }
 
     if (dest_time == kInvalidTime<direction::kForward>) {
       continue;
     }
 
-    auto const [optimal, it] = state_.results_[dest_idx].add(journey{
+    auto const [optimal, it] = results_[dest_idx].add(journey{
         .legs_ = {},
         .start_time_ = departure_time.to_unixtime(tt_),
         .dest_time_ = dest_time.to_unixtime(tt_),
@@ -404,7 +395,7 @@ void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
         try {
           reconstruct_journey(*it, departure_time);
         } catch (std::exception const& e) {
-          state_.results_[dest_idx].erase(it);
+          results_[dest_idx].erase(it);
           log(log_lvl::error, "routing", "reconstruction failed: {}", e.what());
         }
       }
@@ -412,14 +403,14 @@ void bmc_raptor_reconstructor::reconstruct_for_destination(std::size_t dest_idx,
   }
 }
 
-void bmc_raptor_reconstructor::reconstruct() {
-  uncompress_round_bags();
+void mc_raptor_reconstructor::reconstruct() {
+  init();
   get_departure_events();
 
   for (const auto& dep_time : departure_events_) {
 
     for (auto const [i, t] : utl::enumerate(q_.destinations_)) {
-      for (auto const dest : state_.destinations_[i]) {
+      for (auto const dest : destinations_[i]) {
         reconstruct_for_destination(i, dest, dep_time);
       }
     }
