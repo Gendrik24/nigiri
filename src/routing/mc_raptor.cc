@@ -221,7 +221,7 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
 
-  raptor_route_bag r_b{};
+  mc_raptor_route_bag_t r_b{};
   for (auto i = 0U; i != stop_sequence.size(); ++i) {
     auto const stop_idx =
         static_cast<unsigned>(i);

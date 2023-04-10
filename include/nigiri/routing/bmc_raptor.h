@@ -26,8 +26,8 @@ struct timetable;
 namespace nigiri::routing {
 
 using dep_arr_t = std::pair<routing_time, routing_time>;
-using raptor_bag = bmc_raptor_bag<arrival_departure_label>;
-using raptor_route_bag = bmc_raptor_bag<transport_departure_label>;
+using bmc_raptor_bag_t = bmc_raptor_bag<arrival_departure_label>;
+using bmc_raptor_route_bag_t = bmc_raptor_bag<transport_departure_label>;
 
 struct bmc_raptor_search_state;
 
@@ -57,7 +57,7 @@ struct bmc_raptor {
                                           label_bitfield lbl_tdb,
                                           route_idx_t const r,
                                           unsigned const stop_idx,
-                                          raptor_route_bag& bag);
+                                          bmc_raptor_route_bag_t& bag);
   void update_footpaths(unsigned const k);
   void reconstruct();
   void force_print_state(char const* comment = "");
@@ -72,7 +72,7 @@ struct bmc_raptor {
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   query q_;
-  raptor_bag best_destination_bag;
+  bmc_raptor_bag_t best_destination_bag;
   interval<unixtime_t> search_interval_;
   bmc_raptor_search_state& state_;
   bmc_raptor_stats stats_;

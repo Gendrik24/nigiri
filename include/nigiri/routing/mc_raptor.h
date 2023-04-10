@@ -26,8 +26,8 @@ struct timetable;
 namespace nigiri::routing {
 
 using dep_arr_t = std::pair<routing_time, routing_time>;
-using raptor_bag = mc_raptor_bag<mc_raptor_label>;
-using raptor_route_bag = mc_raptor_bag<mc_raptor_route_label>;
+using mc_raptor_bag_t = mc_raptor_bag<mc_raptor_label>;
+using mc_raptor_route_bag_t = mc_raptor_bag<mc_raptor_route_label>;
 
 struct mc_raptor_search_state;
 
@@ -71,7 +71,7 @@ struct mc_raptor {
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   query q_;
-  raptor_bag best_destination_bag;
+  mc_raptor_bag_t best_destination_bag;
   interval<unixtime_t> search_interval_;
   mc_raptor_search_state& state_;
   mc_raptor_stats stats_;

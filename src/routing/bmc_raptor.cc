@@ -286,7 +286,7 @@ bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
 
-  raptor_route_bag r_b{};
+  bmc_raptor_route_bag_t r_b{};
   for (auto i = 0U; i != stop_sequence.size(); ++i) {
     auto const stop_idx =
         static_cast<unsigned>(i);
@@ -470,7 +470,7 @@ void bmc_raptor::get_earliest_sufficient_transports(const arrival_departure_labe
                                                         label_bitfield lbl_tdb,
                                                         route_idx_t const r,
                                                         unsigned const stop_idx,
-                                                        raptor_route_bag& bag) {
+                                                        bmc_raptor_route_bag_t& bag) {
   NIGIRI_PROFILE_COUNT(n_earliest_trip_calls_);
   const auto lbl_arr_offset = (label.arrival_.count() / 1440U);
 
