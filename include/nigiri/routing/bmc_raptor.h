@@ -2,13 +2,13 @@
 
 #include <vector>
 
+#include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/bmc_raptor_label.h"
+#include "nigiri/routing/bmc_raptor_route_label.h"
 #include "nigiri/routing/bmc_raptor_search_state.h"
 #include "nigiri/routing/query.h"
-#include "nigiri/routing/routing_time.h"
 #include "nigiri/routing/raptor.h"
-#include "nigiri/routing/arrival_departure_label.h"
-#include "nigiri/routing/transport_departure_label.h"
-#include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/routing_time.h"
 #include "nigiri/types.h"
 
 //#define NIGIRI_OPENMP
@@ -26,8 +26,8 @@ struct timetable;
 namespace nigiri::routing {
 
 using dep_arr_t = std::pair<routing_time, routing_time>;
-using bmc_raptor_bag_t = bmc_raptor_bag<arrival_departure_label>;
-using bmc_raptor_route_bag_t = bmc_raptor_bag<transport_departure_label>;
+using bmc_raptor_bag_t = bmc_raptor_bag<bmc_raptor_label>;
+using bmc_raptor_route_bag_t = bmc_raptor_bag<bmc_raptor_route_label>;
 
 struct bmc_raptor_search_state;
 
@@ -44,16 +44,23 @@ struct bmc_raptor_stats {
   std::uint64_t lb_time_{0ULL};
 };
 
+template <criteria crit>
 struct bmc_raptor {
   bmc_raptor(timetable const& tt,
              bmc_raptor_search_state& state,
              query q);
+  void route();
+
+  bmc_raptor_stats const& get_stats() const;
+
+private:
+  static constexpr auto const kBiCrit = (crit == criteria::biCriteria);
+  static constexpr auto const kMultiCrit = (crit == criteria::multiCriteria);
 
   void init_starts();
-  void route();
   void rounds();
   bool update_route(unsigned const k, route_idx_t route);
-  void get_earliest_sufficient_transports(const arrival_departure_label label,
+  void get_earliest_sufficient_transports(const bmc_raptor_label label,
                                           label_bitfield lbl_tdb,
                                           route_idx_t const r,
                                           unsigned const stop_idx,

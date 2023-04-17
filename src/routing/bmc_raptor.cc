@@ -36,7 +36,8 @@
 
 namespace nigiri::routing {
 
-bmc_raptor::bmc_raptor(const timetable& tt,
+template <criteria crit>
+bmc_raptor<crit>::bmc_raptor(const timetable& tt,
                                bmc_raptor_search_state& state,
                                query q)
     : tt_{tt},
@@ -51,20 +52,29 @@ bmc_raptor::bmc_raptor(const timetable& tt,
       n_days_to_iterate_{std::min(kMaxTravelTime / 1440U + 1,
                                   static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())))} {}
 
-day_idx_t bmc_raptor::start_day_offset() const {
+template <criteria crit>
+bmc_raptor_stats const& bmc_raptor<crit>::get_stats() const {
+  return stats_;
+}
+
+template <criteria crit>
+day_idx_t bmc_raptor<crit>::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
 }
 
-day_idx_t bmc_raptor::number_of_days_in_search_interval() const {
+template <criteria crit>
+day_idx_t bmc_raptor<crit>::number_of_days_in_search_interval() const {
   return tt_.day_idx_mam(this->search_interval_.to_).first
          - tt_.day_idx_mam(this->search_interval_.from_).first + 1;
 }
 
-unsigned bmc_raptor::end_k() const {
+template <criteria crit>
+unsigned bmc_raptor<crit>::end_k() const {
   return std::min(kMaxTransfers, q_.max_transfers_) + 1U;
 }
 
-void bmc_raptor::init_location_with_offset(minutes_after_midnight_t time_to_arrive,
+template <criteria crit>
+void bmc_raptor<crit>::init_location_with_offset(minutes_after_midnight_t time_to_arrive,
                                                location_idx_t location) {
   for (auto const& r : tt_.location_routes_.at(location)) {
 
@@ -110,9 +120,11 @@ void bmc_raptor::init_location_with_offset(minutes_after_midnight_t time_to_arri
 
         if (traffic_day_bitfield.any() && (at_stop-start_time) <= minutes_after_midnight_t{kMaxTravelTime}) {
           bool merged = state_.round_bags_[0U][to_idx(location)]
-                            .merge(arrival_departure_label{
+                            .merge(
+              bmc_raptor_label{
                                 at_stop,
-                                start_time},
+                                start_time,
+                                kBiCrit ? minutes_after_midnight_t::max() : time_to_arrive},
                                 label_bitfield{traffic_day_bitfield.to_string()});
 
           state_.station_mark_[to_idx(location)] = merged || state_.station_mark_[to_idx(location)];
@@ -125,16 +137,19 @@ void bmc_raptor::init_location_with_offset(minutes_after_midnight_t time_to_arri
         std::string(to_idx(number_of_days_in_search_interval()), '0').replace(0U, 1U, "1"),
     };
     bool merged = state_.round_bags_[0U][to_idx(location)]
-                      .merge(arrival_departure_label{
+                      .merge(
+        bmc_raptor_label{
                           first_out_of_interval + time_to_arrive,
-                          first_out_of_interval},
+                          first_out_of_interval,
+                          kBiCrit ? minutes_after_midnight_t::max() : time_to_arrive},
                           traffic_day_bitfield);
 
     state_.station_mark_[to_idx(location)] = merged || state_.station_mark_[to_idx(location)];
   }
 }
 
-void bmc_raptor::update_destination_bag(unsigned long k) {
+template <criteria crit>
+void bmc_raptor<crit>::update_destination_bag(unsigned long k) {
   for (auto const dest : state_.destinations_.front()) {
     for (const auto& rl : state_.round_bags_[k-1][to_idx(dest)]) {
       best_destination_bag.merge(rl.label_, rl.tdb_);
@@ -142,7 +157,8 @@ void bmc_raptor::update_destination_bag(unsigned long k) {
   }
 }
 
-void bmc_raptor::init_starts() {
+template <criteria crit>
+void bmc_raptor<crit>::init_starts() {
   std::set<location_idx_t> seen;
   for (const auto& o : q_.start_) {
     seen.clear();
@@ -165,8 +181,8 @@ void bmc_raptor::init_starts() {
   }
 }
 
-
-void bmc_raptor::route() {
+template <criteria crit>
+void bmc_raptor<crit>::route() {
   state_.reset(tt_);
   state_.search_interval_ = search_interval_;
 
@@ -203,7 +219,8 @@ void bmc_raptor::route() {
   }
 }
 
-void bmc_raptor::rounds() {
+template <criteria crit>
+void bmc_raptor<crit>::rounds() {
   print_state();
   for (auto k = 1U; k != end_k(); ++k) {
     trace_always("┊ round k={}\n", k);
@@ -281,7 +298,8 @@ void bmc_raptor::rounds() {
   }
 }
 
-bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
+template <criteria crit>
+bool bmc_raptor<crit>::update_route(unsigned const k, route_idx_t route_idx) {
 
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
@@ -317,9 +335,10 @@ bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
           active_label.to_string(), active_label.t_, new_arr, new_arr);
-      const auto candidate_lbl = arrival_departure_label{
+      const auto candidate_lbl = bmc_raptor_label{
           new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
-          active_label.label_.departure_};
+          active_label.label_.departure_,
+          kBiCrit ? minutes_after_midnight_t::max() : (active_label.label_.walking_time_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset))};
       auto candidate_tdb = active_label.tdb_;
 
       if (!stop.out_allowed() || (candidate_lbl.arrival_ - candidate_lbl.departure_).count() > kMaxTravelTime) {
@@ -349,10 +368,12 @@ bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
         continue;
       }
 
-      candidate_tdb = best_destination_bag.filter_dominated(arrival_departure_label{
-                                                                new_arr + lower_bound,
-                                                                active_label.label_.departure_
-                                                            }, candidate_tdb);
+      candidate_tdb = best_destination_bag.filter_dominated(
+          bmc_raptor_label{
+              new_arr + lower_bound,
+              active_label.label_.departure_,
+              kBiCrit ? minutes_after_midnight_t::max() : (active_label.label_.walking_time_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset))},
+            candidate_tdb);
 
       if (candidate_tdb.none()) {
         NIGIRI_PROFILE_COUNT(route_update_prevented_by_lower_bound_);
@@ -386,11 +407,11 @@ bool bmc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   return any_marked;
 }
 
-
-void bmc_raptor::update_footpaths(unsigned const k) {
+template <criteria crit>
+void bmc_raptor<crit>::update_footpaths(unsigned const k) {
   trace("┊ ├ FOOTPATHS\n");
-  std::vector<std::vector<cista::pair<arrival_departure_label, label_bitfield>>> buffered_labels{
-      tt_.n_locations(), std::vector<cista::pair<arrival_departure_label, label_bitfield>>()};
+  std::vector<std::vector<cista::pair<bmc_raptor_label, label_bitfield>>> buffered_labels{
+      tt_.n_locations(), std::vector<cista::pair<bmc_raptor_label, label_bitfield>>()};
 
   for (auto l_idx = location_idx_t{0U}; l_idx != tt_.n_locations(); ++l_idx) {
     trace("┊ ├ updating footpaths of {} ({} of {})\n", location{tt_, l_idx}, l_idx, tt_.n_locations());
@@ -406,9 +427,10 @@ void bmc_raptor::update_footpaths(unsigned const k) {
       auto const fp_offset = fp.duration_ - ((state_.is_destination_[to_idx(l_idx)]) ? minutes_after_midnight_t::zero() : tt_.locations_.transfer_time_[l_idx]);
       trace("┊ │    ├ Footpath of duration {} to target {} merging {} labels\n", fp_offset, location{tt_, fp.target_}, round_bag.size());
       for (const auto & rl : round_bag) {
-        const arrival_departure_label l_with_foot{
-          rl.label_.arrival_ + fp_offset,
-              rl.label_.departure_};
+        const bmc_raptor_label l_with_foot{
+              rl.label_.arrival_ + fp_offset,
+              rl.label_.departure_,
+              kBiCrit ? minutes_after_midnight_t::max() : rl.label_.walking_time_ + fp_offset};
 
         if ((l_with_foot.arrival_-l_with_foot.departure_).count() > kMaxTravelTime) {
           continue;
@@ -439,10 +461,12 @@ void bmc_raptor::update_footpaths(unsigned const k) {
           continue;
         }
 
-        tdb = best_destination_bag.filter_dominated(arrival_departure_label{
-                                                        rl.label_.arrival_ + fp_offset + lower_bound,
-                                                        rl.label_.departure_
-                                                    }, tdb);
+        tdb = best_destination_bag.filter_dominated(
+            bmc_raptor_label{
+                      rl.label_.arrival_ + fp_offset + lower_bound,
+                      rl.label_.departure_,
+                      kBiCrit ? minutes_after_midnight_t::max() : rl.label_.walking_time_ + fp_offset},
+                  tdb);
 
         if (tdb.none()) {
           NIGIRI_PROFILE_COUNT(fp_update_prevented_by_lower_bound_);
@@ -466,11 +490,12 @@ void bmc_raptor::update_footpaths(unsigned const k) {
 
 }
 
-void bmc_raptor::get_earliest_sufficient_transports(const arrival_departure_label label,
-                                                        label_bitfield lbl_tdb,
-                                                        route_idx_t const r,
-                                                        unsigned const stop_idx,
-                                                        bmc_raptor_route_bag_t& bag) {
+template <criteria crit>
+void bmc_raptor<crit>::get_earliest_sufficient_transports(const bmc_raptor_label label,
+                                                          label_bitfield lbl_tdb,
+                                                          route_idx_t const r,
+                                                          unsigned const stop_idx,
+                                                          bmc_raptor_route_bag_t& bag) {
   NIGIRI_PROFILE_COUNT(n_earliest_trip_calls_);
   const auto lbl_arr_offset = (label.arrival_.count() / 1440U);
 
@@ -523,9 +548,11 @@ void bmc_raptor::get_earliest_sufficient_transports(const arrival_departure_labe
 
       const auto new_td_bitfield = lbl_tdb & (~trip_label_traffic_day_bitfield);
       if ((new_td_bitfield ^ lbl_tdb).any()) {
-        bag.merge(transport_departure_label{
+        bag.merge(
+            bmc_raptor_route_label{
             relative_transport{t, relative_day_idx_t{day - ev_day_offset}},
-            label.departure_},
+            label.departure_,
+            kBiCrit ? minutes_after_midnight_t::max() : label.walking_time_},
             lbl_tdb & trip_label_traffic_day_bitfield
         );
         lbl_tdb = new_td_bitfield;
@@ -534,7 +561,8 @@ void bmc_raptor::get_earliest_sufficient_transports(const arrival_departure_labe
   }
 }
 
-void bmc_raptor::force_print_state(const char* comment) {
+template <criteria crit>
+void bmc_raptor<crit>::force_print_state(const char* comment) {
   auto const empty_rounds = [&](std::uint32_t const l) {
     for (auto k = 0U; k != end_k(); ++k) {
       if (state_.round_bags_[k][l].size() != 0) {
@@ -587,8 +615,8 @@ void bmc_raptor::force_print_state(const char* comment) {
   }
 }
 
-
-void bmc_raptor::reconstruct() {
+template <criteria crit>
+void bmc_raptor<crit>::reconstruct() {
   state_.results_.resize(
       std::max(state_.results_.size(), state_.destinations_.size()));
 
@@ -612,7 +640,8 @@ void bmc_raptor::reconstruct() {
       for (const auto& arr_dep_l : uncompressed_labels) {
         ert.push_back(mc_raptor_label{
             routing_time{first_day_offset + arr_dep_l.arrival_.count() / 1440, arr_dep_l.arrival_ % 1440},
-            routing_time{first_day_offset + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440}
+            routing_time{first_day_offset + arr_dep_l.departure_.count() / 1440, arr_dep_l.departure_ % 1440},
+            kBiCrit ? minutes_after_midnight_t::max() : arr_dep_l.walking_time_
         });
       }
     }
@@ -638,7 +667,11 @@ void profile_raptor::print_state(char const* comment) {
   force_print_state(comment);
 }
 #else
-void bmc_raptor::print_state(char const*) {}
+template <criteria crit>
+void bmc_raptor<crit>::print_state(char const*) {}
 #endif
+
+template struct bmc_raptor<criteria::biCriteria>;
+template struct bmc_raptor<criteria::multiCriteria>;
 
 }

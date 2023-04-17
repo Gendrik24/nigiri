@@ -2,14 +2,14 @@
 
 #include <vector>
 
-#include "nigiri/routing/mc_raptor_search_state.h"
-#include "nigiri/routing/query.h"
-#include "nigiri/routing/routing_time.h"
-#include "nigiri/routing/raptor.h"
+#include "nigiri/routing/bmc_raptor_route_label.h"
+#include "nigiri/routing/mc_raptor_bag.h"
 #include "nigiri/routing/mc_raptor_label.h"
 #include "nigiri/routing/mc_raptor_route_label.h"
-#include "nigiri/routing/transport_departure_label.h"
-#include "nigiri/routing/mc_raptor_bag.h"
+#include "nigiri/routing/mc_raptor_search_state.h"
+#include "nigiri/routing/query.h"
+#include "nigiri/routing/raptor.h"
+#include "nigiri/routing/routing_time.h"
 #include "nigiri/types.h"
 
 #define MC_RAPTOR_GLOBAL_PRUNING
@@ -44,16 +44,24 @@ struct mc_raptor_stats {
   std::uint64_t lb_time_{0ULL};
 };
 
+template <criteria crit>
 struct mc_raptor {
   mc_raptor(timetable const& tt,
            mc_raptor_search_state& state,
            query q);
 
+  void route();
+
+  mc_raptor_stats const& get_stats() const;
+
+private:
+  static constexpr auto const kBiCrit = (crit == criteria::biCriteria);
+  static constexpr auto const kMultiCrit = (crit == criteria::multiCriteria);
+
   bool is_better(auto a, auto b);
   bool is_better_or_eq(auto a, auto b);
   auto get_best(auto a, auto b);
 
-  void route();
   void rounds();
   bool update_route(unsigned const k, route_idx_t route);
   transport get_earliest_transport(const mc_raptor_label& current,

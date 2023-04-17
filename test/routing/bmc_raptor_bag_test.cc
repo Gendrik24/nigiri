@@ -1,7 +1,7 @@
 #include "doctest/doctest.h"
 
-#include "nigiri/routing/arrival_departure_label.h"
 #include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/bmc_raptor_label.h"
 #include "nigiri/types.h"
 
 #include "cista/containers/pair.h"
@@ -11,7 +11,7 @@
 
 using namespace nigiri;
 using namespace nigiri::routing;
-using label = typename nigiri::routing::arrival_departure_label;
+using label = typename nigiri::routing::bmc_raptor_label;
 using control_bag_t = typename std::vector<cista::pair<label, label_bitfield>>;
 using bag_t = typename nigiri::routing::bmc_raptor_bag<label>;
 
@@ -33,9 +33,9 @@ TEST_CASE("bmc-raptor-bag") {
   bag_t bag;
   control_bag_t control_bag;
 
-  const label l1{minutes_after_midnight_t{180}, minutes_after_midnight_t{150}};
-  const label l2{minutes_after_midnight_t{180}, minutes_after_midnight_t{140}};
-  const label l3{minutes_after_midnight_t{200}, minutes_after_midnight_t{130}};
+  const label l1{minutes_after_midnight_t{180}, minutes_after_midnight_t{150}, minutes_after_midnight_t ::max()};
+  const label l2{minutes_after_midnight_t{180}, minutes_after_midnight_t{140}, minutes_after_midnight_t ::max()};
+  const label l3{minutes_after_midnight_t{200}, minutes_after_midnight_t{130}, minutes_after_midnight_t ::max()};
   const std::string tdb1{"1001"};
   const std::string tdb2{"0110"};
   const std::string tdb3{"0011"};
@@ -56,7 +56,7 @@ TEST_CASE("bmc-raptor-bag") {
 
   is_equal(bag, control_bag);
 
-  const label l4{minutes_after_midnight_t{170}, minutes_after_midnight_t{150}};
+  const label l4{minutes_after_midnight_t{170}, minutes_after_midnight_t{150}, minutes_after_midnight_t ::max()};
   bag.merge(l4, label_bitfield{"0011"});
 
   control_bag[0].second = label_bitfield{"1100"};
@@ -64,7 +64,7 @@ TEST_CASE("bmc-raptor-bag") {
 
   is_equal(bag, control_bag);
 
-  const label l5{minutes_after_midnight_t{200}, minutes_after_midnight_t{140}};
+  const label l5{minutes_after_midnight_t{200}, minutes_after_midnight_t{140}, minutes_after_midnight_t ::max()};
   bag.merge(l5, label_bitfield{"0110"});
   is_equal(bag, control_bag);
 
@@ -72,10 +72,10 @@ TEST_CASE("bmc-raptor-bag") {
   control_bag.clear();
   CHECK_EQ(bag.size(), 0U);
 
-  const label l6{minutes_after_midnight_t{240}, minutes_after_midnight_t{120}};
-  const label l7{minutes_after_midnight_t {300}, minutes_after_midnight_t{120}};
-  const label l8{minutes_after_midnight_t {300}, minutes_after_midnight_t {180}};
-  const label l9{minutes_after_midnight_t {360}, minutes_after_midnight_t {240}};
+  const label l6{minutes_after_midnight_t{240}, minutes_after_midnight_t{120}, minutes_after_midnight_t ::max()};
+  const label l7{minutes_after_midnight_t {300}, minutes_after_midnight_t{120}, minutes_after_midnight_t ::max()};
+  const label l8{minutes_after_midnight_t {300}, minutes_after_midnight_t {180}, minutes_after_midnight_t ::max()};
+  const label l9{minutes_after_midnight_t {360}, minutes_after_midnight_t {240}, minutes_after_midnight_t ::max()};
   label_bitfield tdb{"1"};
   bag.merge(l6, tdb);
   bag.merge(l7, tdb << 1);
@@ -88,7 +88,7 @@ TEST_CASE("bmc-raptor-bag") {
   control_bag.push_back({l9, tdb << 3});
 
   is_equal(bag, control_bag);
-  const label l10{minutes_after_midnight_t{300}, minutes_after_midnight_t {240}};
+  const label l10{minutes_after_midnight_t{300}, minutes_after_midnight_t {240}, minutes_after_midnight_t ::max()};
   bag.merge(l10, label_bitfield{"1111"});
 
   control_bag.erase(control_bag.begin()+1, control_bag.end());
@@ -101,7 +101,7 @@ TEST_CASE("bmc-raptor-bag") {
 
   is_equal(bag, control_bag);
 
-  const label l11{minutes_after_midnight_t {300}, minutes_after_midnight_t {250}};
+  const label l11{minutes_after_midnight_t {300}, minutes_after_midnight_t {250}, minutes_after_midnight_t ::max()};
   bag.merge(l11, label_bitfield{"1001"});
 
   control_bag[1].second = label_bitfield{"0110"};

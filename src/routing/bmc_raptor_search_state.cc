@@ -1,9 +1,9 @@
 #include "nigiri/routing/bmc_raptor_search_state.h"
 
+#include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/bmc_raptor_label.h"
 #include "nigiri/routing/limits.h"
 #include "nigiri/timetable.h"
-#include "nigiri/routing/bmc_raptor_bag.h"
-#include "nigiri/routing/arrival_departure_label.h"
 
 namespace nigiri::routing {
 
@@ -21,10 +21,10 @@ void bmc_raptor_search_state::reset(const timetable& tt) {
   std::fill(begin(route_mark_), end(route_mark_), false);
 
   best_bags_.resize(tt.n_locations());
-  std::fill(begin(best_bags_), end(best_bags_), bmc_raptor_bag<arrival_departure_label>());
+  std::fill(begin(best_bags_), end(best_bags_), bmc_raptor_bag<bmc_raptor_label>());
 
   round_bags_.resize(kMaxTransfers + 1U, tt.n_locations());
-  round_bags_.reset(bmc_raptor_bag<arrival_departure_label>());
+  round_bags_.reset(bmc_raptor_bag<bmc_raptor_label>());
 
   travel_time_lower_bound_.resize(tt.n_locations());
   std::fill(begin(travel_time_lower_bound_), end(travel_time_lower_bound_),

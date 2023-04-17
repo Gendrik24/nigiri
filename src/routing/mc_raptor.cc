@@ -37,19 +37,23 @@
 
 namespace nigiri::routing {
 
-bool mc_raptor::is_better(auto a, auto b) {
+template <criteria crit>
+bool mc_raptor<crit>::is_better(auto a, auto b) {
   return a < b;
 }
 
-bool mc_raptor::is_better_or_eq(auto a, auto b) {
+template <criteria crit>
+bool mc_raptor<crit>::is_better_or_eq(auto a, auto b) {
   return a <= b;
 }
 
-auto mc_raptor::get_best(auto a, auto b) {
+template <criteria crit>
+auto mc_raptor<crit>::get_best(auto a, auto b) {
   return is_better(a, b) ? a : b;
 }
 
-mc_raptor::mc_raptor(const timetable& tt,
+template <criteria crit>
+mc_raptor<crit>::mc_raptor(const timetable& tt,
                      mc_raptor_search_state& state,
                      query q)
     : tt_{tt},
@@ -64,20 +68,29 @@ mc_raptor::mc_raptor(const timetable& tt,
       n_days_to_iterate_{std::min(kMaxTravelTime / 1440U + 1,
                                   static_cast<unsigned int>(n_tt_days_ - to_idx(start_day_offset())))} {}
 
-day_idx_t mc_raptor::start_day_offset() const {
+template <criteria crit>
+mc_raptor_stats const& mc_raptor<crit>::get_stats() const {
+  return stats_;
+}
+
+template <criteria crit>
+day_idx_t mc_raptor<crit>::start_day_offset() const {
   return tt_.day_idx_mam(this->search_interval_.from_).first;
 }
 
-day_idx_t mc_raptor::number_of_days_in_search_interval() const {
+template <criteria crit>
+day_idx_t mc_raptor<crit>::number_of_days_in_search_interval() const {
   return tt_.day_idx_mam(this->search_interval_.to_).first
          - tt_.day_idx_mam(this->search_interval_.from_).first + 1;
 }
 
-unsigned mc_raptor::end_k() const {
+template <criteria crit>
+unsigned mc_raptor<crit>::end_k() const {
   return std::min(kMaxTransfers, q_.max_transfers_) + 1U;
 }
 
-void mc_raptor::update_destination_bag(unsigned long k) {
+template <criteria crit>
+void mc_raptor<crit>::update_destination_bag(unsigned long k) {
   for (auto const dest : state_.destinations_.front()) {
     for (const auto& rl : state_.round_bags_[k-1][to_idx(dest)]) {
       best_destination_bag.merge(rl);
@@ -85,9 +98,8 @@ void mc_raptor::update_destination_bag(unsigned long k) {
   }
 }
 
-
-
-void mc_raptor::route() {
+template <criteria crit>
+void mc_raptor<crit>::route() {
   state_.reset(tt_);
   state_.search_interval_ = search_interval_;
 
@@ -126,11 +138,15 @@ void mc_raptor::route() {
           for (auto const& s : it_range{from_it, to_it}) {
             state_.round_bags_[0U][to_idx(s.stop_)].merge(mc_raptor_label(
                 {tt_, s.time_at_stop_},
-                {tt_, from_it->time_at_start_}
+                {tt_, from_it->time_at_start_},
+                kBiCrit ? minutes_after_midnight_t::max() :
+                          minutes_after_midnight_t{routing_time{tt_, s.time_at_stop_}.offset_ - routing_time{tt_, from_it->time_at_start_}.offset_}
             ));
             state_.best_bags_[to_idx(s.stop_)].merge(mc_raptor_label(
                 {tt_, s.time_at_stop_},
-                {tt_, from_it->time_at_start_}
+                {tt_, from_it->time_at_start_},
+                kBiCrit ? minutes_after_midnight_t::max() :
+                        minutes_after_midnight_t{routing_time{tt_, s.time_at_stop_}.offset_ - routing_time{tt_, from_it->time_at_start_}.offset_}
             ));
             state_.station_mark_[to_idx(s.stop_)] = true;
           }
@@ -145,7 +161,8 @@ void mc_raptor::route() {
   }
 }
 
-void mc_raptor::rounds() {
+template <criteria crit>
+void mc_raptor<crit>::rounds() {
   for (auto k = 1U; k != end_k(); ++k) {
 
 #ifdef MC_RAPTOR_GLOBAL_PRUNING
@@ -216,7 +233,8 @@ void mc_raptor::rounds() {
   }
 }
 
-bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
+template <criteria crit>
+bool mc_raptor<crit>::update_route(unsigned const k, route_idx_t route_idx) {
 
   auto any_marked = false;
   auto const stop_sequence = tt_.route_location_seq_[route_idx];
@@ -241,7 +259,8 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
 
       const auto candidate_lbl = mc_raptor_label{
           new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
-          active_label.departure_};
+          active_label.departure_,
+          kBiCrit ? minutes_after_midnight_t::max() : (active_label.walking_time_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset))};
 
       if (!stop.out_allowed() || (candidate_lbl.arrival_.offset_ - candidate_lbl.departure_.offset_) > kMaxTravelTime) {
         continue;
@@ -269,8 +288,9 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
       }
 
       const auto dominated = best_destination_bag.is_dominated(mc_raptor_label{
-                                                                new_arr + lower_bound,
-                                                                active_label.departure_});
+            new_arr + lower_bound,
+            active_label.departure_,
+            kBiCrit ? minutes_after_midnight_t::max() : (active_label.walking_time_ + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset))});
 
       if (dominated) {
         NIGIRI_MC_RAPTOR_COUNT(route_update_prevented_by_lower_bound_);
@@ -294,7 +314,7 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
         auto const new_et =
           get_earliest_transport(l, route_idx, stop_idx, location_idx_t{l_idx});
         if (new_et.is_valid()) {
-          r_b.merge(mc_raptor_route_label(new_et, l.departure_));
+          r_b.merge(mc_raptor_route_label(new_et, l.departure_, l.walking_time_));
         }
       }
     }
@@ -302,8 +322,8 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
   return any_marked;
 }
 
-
-void mc_raptor::update_footpaths(unsigned const k) {
+template <criteria crit>
+void mc_raptor<crit>::update_footpaths(unsigned const k) {
   std::vector<std::vector<mc_raptor_label>> buffered_labels{
       tt_.n_locations(), std::vector<mc_raptor_label>()};
 
@@ -320,7 +340,8 @@ void mc_raptor::update_footpaths(unsigned const k) {
       for (const auto & rl : round_bag) {
         const mc_raptor_label l_with_foot{
             rl.arrival_ + fp_offset,
-            rl.departure_};
+            rl.departure_,
+            kBiCrit ? minutes_after_midnight_t::max() : rl.walking_time_ + fp_offset};
 
         if ((l_with_foot.arrival_.offset_ - l_with_foot.departure_.offset_) > kMaxTravelTime) {
           continue;
@@ -349,7 +370,8 @@ void mc_raptor::update_footpaths(unsigned const k) {
 
         const auto dominated = best_destination_bag.is_dominated(mc_raptor_label{
                                                         rl.arrival_ + fp_offset + lower_bound,
-                                                        rl.departure_});
+                                                        rl.departure_,
+                                                        kBiCrit ? minutes_after_midnight_t::max() : rl.walking_time_ + fp_offset});
 
         if (dominated) {
           NIGIRI_MC_RAPTOR_COUNT(fp_update_prevented_by_lower_bound_);
@@ -373,7 +395,8 @@ void mc_raptor::update_footpaths(unsigned const k) {
 
 }
 
-transport mc_raptor::get_earliest_transport(
+template <criteria crit>
+transport mc_raptor<crit>::get_earliest_transport(
     const mc_raptor_label& current,
     route_idx_t const r,
     unsigned const stop_idx,
@@ -419,7 +442,9 @@ transport mc_raptor::get_earliest_transport(
       auto const ev_mam = minutes_after_midnight_t{
           ev.count() < 1440 ? ev.count() : ev.count() % 1440};
 
-      if (best_destination_bag.is_dominated(mc_raptor_label(routing_time{day, ev_mam}, current.departure_))) {
+      if (best_destination_bag.is_dominated(mc_raptor_label(routing_time{day, ev_mam},
+                                                            current.departure_,
+                                                            kBiCrit ? minutes_after_midnight_t::max() : current.walking_time_))) {
         return {transport_idx_t::invalid(), day_idx_t::invalid()};
       }
 
@@ -442,8 +467,8 @@ transport mc_raptor::get_earliest_transport(
   return {transport_idx_t::invalid(), day_idx_t::invalid()};
 }
 
-
-void mc_raptor::reconstruct() {
+template <criteria crit>
+void mc_raptor<crit>::reconstruct() {
   state_.results_.resize(
       std::max(state_.results_.size(), state_.destinations_.size()));
 
@@ -477,6 +502,9 @@ void mc_raptor::reconstruct() {
   stats_.n_reconstruction_time = static_cast<std::uint64_t>(UTL_TIMING_MS(rc));
 #endif
 }
+
+template struct mc_raptor<criteria::biCriteria>;
+template struct mc_raptor<criteria::multiCriteria>;
 
 
 }

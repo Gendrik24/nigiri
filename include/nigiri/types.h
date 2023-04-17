@@ -223,6 +223,7 @@ enum class location_type : std::uint8_t { kTrack, kPlatform, kStation };
 
 enum class event_type { kArr, kDep };
 enum class direction { kForward, kBackward };
+enum class criteria { biCriteria, multiCriteria };
 
 }  // namespace nigiri
 

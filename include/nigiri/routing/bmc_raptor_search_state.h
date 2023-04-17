@@ -5,13 +5,12 @@
 
 #include "cista/containers/flat_matrix.h"
 
+#include "nigiri/routing/bmc_raptor_bag.h"
+#include "nigiri/routing/bmc_raptor_label.h"
 #include "nigiri/routing/journey.h"
 #include "nigiri/routing/pareto_set.h"
 #include "nigiri/routing/routing_time.h"
-#include "nigiri/routing/bmc_raptor_bag.h"
-#include "nigiri/routing/arrival_departure_label.h"
 #include "nigiri/types.h"
-
 
 namespace nigiri {
 struct timetable;
@@ -22,8 +21,8 @@ namespace nigiri::routing {
 struct bmc_raptor_search_state {
   void reset(timetable const& tt);
 
-  std::vector<bmc_raptor_bag<arrival_departure_label>> best_bags_;
-  matrix<bmc_raptor_bag<arrival_departure_label>> round_bags_;
+  std::vector<bmc_raptor_bag<bmc_raptor_label>> best_bags_;
+  matrix<bmc_raptor_bag<bmc_raptor_label>> round_bags_;
   std::vector<bool> station_mark_;
   std::vector<bool> prev_station_mark_;
   std::vector<bool> route_mark_;

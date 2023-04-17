@@ -82,13 +82,13 @@ TEST_CASE("profile-raptor") {
       .extend_interval_earlier_ = false,
       .extend_interval_later_ = false};
 
-  auto fwdp_r = routing::bmc_raptor{
+  auto fwdp_r = routing::bmc_raptor<criteria::biCriteria>{
       tt, profile_state, q};
   fwdp_r.route();
 
   std::stringstream ss_profile;
   ss_profile << "\n";
-  for (auto const& x : fwdp_r.state_.results_.at(0)) {
+  for (auto const& x : profile_state.results_.at(0)) {
     x.print(ss_profile, tt);
     ss_profile << "\n\n";
   }
