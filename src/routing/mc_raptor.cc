@@ -243,7 +243,7 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
           new_arr + (is_destination ? minutes_after_midnight_t::zero() : transfer_time_offset),
           active_label.departure_};
 
-      if (!stop.out_allowed() || (candidate_lbl.arrival_ - candidate_lbl.departure_).count() > kMaxTravelTime) {
+      if (!stop.out_allowed() || (candidate_lbl.arrival_.offset_ - candidate_lbl.departure_.offset_) > kMaxTravelTime) {
         continue;
       }
 
@@ -322,7 +322,7 @@ void mc_raptor::update_footpaths(unsigned const k) {
             rl.arrival_ + fp_offset,
             rl.departure_};
 
-        if ((l_with_foot.arrival_-l_with_foot.departure_).count() > kMaxTravelTime) {
+        if ((l_with_foot.arrival_.offset_ - l_with_foot.departure_.offset_) > kMaxTravelTime) {
           continue;
         }
 
