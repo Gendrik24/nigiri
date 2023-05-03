@@ -320,7 +320,7 @@ bool bmc_raptor<crit>::update_route(unsigned const k, route_idx_t route_idx) {
         "┊ │    Update arrival times of labels in route bag:\n");
     auto const transfer_time_offset = tt_.locations_.transfer_time_[location_idx_t{l_idx}];
     auto const is_destination = state_.is_destination_[l_idx];
-    for (const auto& active_label : r_b) {
+    for (auto& active_label : r_b) {
       if (active_label.label_.transport_.t_idx_ == transport_idx_t::invalid()) {
         trace(
             "┊ │    │ current label={} has no active transport -> SKIP!\n",
@@ -331,6 +331,8 @@ bool bmc_raptor<crit>::update_route(unsigned const k, route_idx_t route_idx) {
                                          active_label.label_.transport_.t_idx_,
                                          stop_idx,
                                          event_type::kArr) + minutes_after_midnight_t{to_idx(active_label.label_.transport_.day_) * 1440};
+
+      active_label.label_.current_stop_time_ = new_arr;
 
       trace(
           "┊ │    │ current label={}, active transport={} -> updated arrival time={}, transfer time={}\n",
@@ -548,10 +550,12 @@ void bmc_raptor<crit>::get_earliest_sufficient_transports(const bmc_raptor_label
 
       const auto new_td_bitfield = lbl_tdb & (~trip_label_traffic_day_bitfield);
       if ((new_td_bitfield ^ lbl_tdb).any()) {
+        const auto offset = day - ev_day_offset;
         bag.merge(
             bmc_raptor_route_label{
-            relative_transport{t, relative_day_idx_t{day - ev_day_offset}},
+            relative_transport{t, relative_day_idx_t{offset}},
             label.departure_,
+            (stop_idx == 0 ? tt_.event_mam(t,stop_idx,event_type::kDep) : tt_.event_mam(t,stop_idx,event_type::kArr)) + long_minutes_after_midnight_t{offset * 1440},
             kBiCrit ? minutes_after_midnight_t::max() : label.walking_time_},
             lbl_tdb & trip_label_traffic_day_bitfield
         );
