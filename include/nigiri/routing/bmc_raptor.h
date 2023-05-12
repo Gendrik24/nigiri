@@ -42,6 +42,7 @@ struct bmc_raptor_stats {
   std::uint64_t fp_update_prevented_by_lower_bound_{0ULL};
   std::uint64_t route_update_prevented_by_lower_bound_{0ULL};
   std::uint64_t lb_time_{0ULL};
+  std::uint64_t max_round_arrival_labels_{0ULL};
 };
 
 template <criteria crit>

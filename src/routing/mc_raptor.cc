@@ -26,10 +26,13 @@
 
 #include "fmt/core.h"
 
+#define NIGIRI_MC_RAPTOR_ADDITIONAL_COUNTING
+
 #define NIGIRI_MC_RAPTOR_COUNTING
 #ifdef NIGIRI_MC_RAPTOR_COUNTING
 #define NIGIRI_MC_RAPTOR_COUNT(s) ++stats_.s
 #define NIGIRI_MC_RAPTOR_COUNT_BY(s,a) stats_.s += a
+#define NIGIRI_MC_RAPTOR_COUNT_MAX(s,a) stats_.s = fmax(stats_.s, a)
 #else
 #define NIGIRI_MC_RAPTOR_COUNT(s)
 #define NIGIRI_MC_RAPTOR_COUNT_BY(s,a)
@@ -152,6 +155,18 @@ void mc_raptor<crit>::route() {
           }
         });
   rounds();
+#ifdef NIGIRI_MC_RAPTOR_ADDITIONAL_COUNTING
+  for (auto k = 0U; k != end_k(); ++k) {
+    auto round_num = 0L;
+    for (auto l_idx = location_idx_t{0U};
+         l_idx != static_cast<cista::base_t<location_idx_t>>(
+                      state_.station_mark_.size()); ++l_idx) {
+      round_num += state_.round_bags_[k][to_idx(l_idx)].size();
+    }
+
+    NIGIRI_MC_RAPTOR_COUNT_MAX(max_round_arrival_labels_, round_num);
+  }
+#endif
   reconstruct();
   for (auto& r : state_.results_) {
     utl::erase_if(r, [&](journey const& j) {
