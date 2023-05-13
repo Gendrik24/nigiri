@@ -159,7 +159,7 @@ void mc_raptor<crit>::route() {
     for (auto l_idx = location_idx_t{0U};
          l_idx != static_cast<cista::base_t<location_idx_t>>(
                       state_.station_mark_.size()); ++l_idx) {
-      NIGIRI_MC_RAPTOR_COUNT_BY(max_round_arrival_labels_, state_.round_bags_[k][to_idx(l_idx)].size());
+      NIGIRI_MC_RAPTOR_COUNT_BY(round_arrival_labels_total_, state_.round_bags_[k][to_idx(l_idx)].size());
     }
   }
 #endif
