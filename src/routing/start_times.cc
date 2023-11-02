@@ -5,7 +5,9 @@
 #include "nigiri/special_stations.h"
 #include "utl/enumerate.h"
 #include "utl/get_or_create.h"
+#include "utl/insert_sorted.h"
 #include "utl/overloaded.h"
+
 
 namespace nigiri::routing {
 
@@ -16,19 +18,6 @@ void trace_start(char const* fmt_str, Args... args) {
   if constexpr (kTracing) {
     fmt::print(std::cout, fmt_str, std::forward<Args&&>(args)...);
   }
-}
-
-template <typename Collection, typename Less>
-std::pair<typename Collection::iterator, bool> insert_sorted(
-    Collection& v, typename Collection::value_type el, Less&& less) {
-  using std::begin;
-  using std::end;
-  auto const it =
-      std::lower_bound(begin(v), end(v), el, std::forward<Less>(less));
-  if (it == std::end(v) || *it != el) {
-    return {v.insert(it, std::move(el)), true};
-  }
-  return {it, false};
 }
 
 template <typename Less>
@@ -71,7 +60,7 @@ void add_start_times_at_stop(direction const search_dir,
       if (traffic_days.test(to_idx(day - day_offset)) &&
           interval_with_offset.contains(tt.to_unixtime(day, stop_time_mam))) {
         auto const ev_time = tt.to_unixtime(day, stop_time_mam);
-        auto const [it, inserted] = insert_sorted(
+        auto const [it, inserted] = utl::insert_sorted(
             starts,
             start{.time_at_start_ = search_dir == direction::kForward
                                         ? ev_time - offset
@@ -172,7 +161,7 @@ void add_starts_in_interval(direction const search_dir,
             rt_t, static_cast<stop_idx_t>(i),
             (search_dir == direction::kForward ? event_type::kDep
                                                : event_type::kArr));
-        auto const [it, inserted] = insert_sorted(
+        auto const [it, inserted] = utl::insert_sorted(
             starts,
             start{.time_at_start_ = search_dir == direction::kForward
                                         ? ev_time - d
@@ -195,7 +184,7 @@ void add_starts_in_interval(direction const search_dir,
   // departs later and arrives at the same time). These journeys outside the
   // interval will be filtered out before returning the result.
   if (add_ontrip) {
-    insert_sorted(starts,
+    utl::insert_sorted(starts,
                   start{.time_at_start_ = search_dir == direction::kForward
                                               ? interval.to_
                                               : interval.from_ - 1_minutes,
@@ -249,7 +238,7 @@ void get_starts(direction const search_dir,
                                             starts, add_ontrip, cmp);
                    },
                    [&](unixtime_t const t) {
-                     insert_sorted(starts,
+                    utl::insert_sorted(starts,
                                    start{.time_at_start_ = t,
                                          .time_at_stop_ = fwd ? t + o : t - o,
                                          .stop_ = l},

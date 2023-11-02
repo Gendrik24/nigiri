@@ -2,6 +2,7 @@
 
 #include "nigiri/common/delta_t.h"
 #include "nigiri/common/linear_lower_bound.h"
+#include "nigiri/routing/dijkstra.h"
 #include "nigiri/routing/journey.h"
 #include "nigiri/routing/limits.h"
 #include "nigiri/routing/pareto_set.h"
@@ -31,6 +32,7 @@ struct raptor {
   using algo_stats_t = raptor_stats;
 
   static constexpr bool kUseLowerBounds = true;
+  static constexpr bool kUseTransfersLowerBounds = false;
   static constexpr auto const kFwd = (SearchDir == direction::kForward);
   static constexpr auto const kBwd = (SearchDir == direction::kBackward);
   static constexpr auto const kInvalid = kInvalidDelta<SearchDir>;
@@ -53,7 +55,7 @@ struct raptor {
          raptor_state& state,
          std::vector<bool>& is_dest,
          std::vector<std::uint16_t>& dist_to_dest,
-         std::vector<std::uint16_t>& lb,
+         std::vector<lower_bound>& lb,
          day_idx_t const base)
       : tt_{tt},
         rtt_{rtt},
@@ -228,8 +230,8 @@ private:
           static_cast<delta_t>(state_.tmp_[i] + transfer_time);
       if (is_better(fp_target_time, state_.best_[i]) &&
           is_better(fp_target_time, time_at_dest_[k])) {
-        if (lb_[i] == kUnreachable ||
-            !is_better(fp_target_time + dir(lb_[i]), time_at_dest_[k])) {
+        if (lb_[i].travel_time_ == lower_bound::kTravelTimeUnreachable ||
+            !is_better(fp_target_time + dir(lb_[i].travel_time_), time_at_dest_[k])) {
           ++stats_.fp_update_prevented_by_lower_bound_;
           continue;
         }
@@ -264,8 +266,8 @@ private:
         if (is_better(fp_target_time, state_.best_[target]) &&
             is_better(fp_target_time, time_at_dest_[k])) {
           auto const lower_bound = lb_[to_idx(fp.target())];
-          if (lower_bound == kUnreachable ||
-              !is_better(fp_target_time + dir(lower_bound), time_at_dest_[k])) {
+          if (lower_bound.travel_time_ == lower_bound::kTravelTimeUnreachable ||
+              !is_better(fp_target_time + dir(lower_bound.travel_time_), time_at_dest_[k])) {
             ++stats_.fp_update_prevented_by_lower_bound_;
             trace_upd(
                 "┊ ├k={} *** LB NO UPD: (from={}, tmp={}) --{}--> (to={}, "
@@ -348,8 +350,8 @@ private:
                                   state_.tmp_[l_idx], state_.best_[l_idx]);
           if (is_better(by_transport, current_best) &&
               is_better(by_transport, time_at_dest_[k]) &&
-              lb_[l_idx] != kUnreachable &&
-              is_better(by_transport + dir(lb_[l_idx]), time_at_dest_[k])) {
+              lb_[l_idx].travel_time_ != lower_bound::kTravelTimeUnreachable &&
+              is_better(by_transport + dir(lb_[l_idx].travel_time_), time_at_dest_[k])) {
             trace_upd(
                 "┊ │k={}    RT | name={}, dbg={}, time_by_transport={}, BETTER "
                 "THAN current_best={} => update, {} marking station {}!\n",
@@ -367,7 +369,7 @@ private:
         }
       }
 
-      if (lb_[l_idx] == kUnreachable) {
+      if (lb_[l_idx].travel_time_ == lower_bound::kTravelTimeUnreachable) {
         break;
       }
 
@@ -421,8 +423,8 @@ private:
                by_transport != std::numeric_limits<delta_t>::max());
         if (is_better(by_transport, current_best) &&
             is_better(by_transport, time_at_dest_[k]) &&
-            lb_[l_idx] != kUnreachable &&
-            is_better(by_transport + dir(lb_[l_idx]), time_at_dest_[k])) {
+            lb_[l_idx].travel_time_ != lower_bound::kTravelTimeUnreachable &&
+            is_better(by_transport + dir(lb_[l_idx].travel_time_), time_at_dest_[k])) {
           trace_upd(
               "┊ │k={}    name={}, dbg={}, time_by_transport={}, BETTER THAN "
               "current_best={} => update, {} marking station {}!\n",
@@ -476,7 +478,7 @@ private:
         continue;
       }
 
-      if (lb_[l_idx] == kUnreachable) {
+      if (lb_[l_idx].travel_time_ == lower_bound::kTravelTimeUnreachable) {
         break;
       }
 
@@ -559,7 +561,7 @@ private:
         auto const ev_mam = ev.mam();
 
         if (is_better_or_eq(time_at_dest_[k],
-                            to_delta(day, ev_mam) + dir(lb_[to_idx(l)]))) {
+                            to_delta(day, ev_mam) + dir(lb_[to_idx(l)].travel_time_))) {
           trace(
               "┊ │k={}      => name={}, dbg={}, day={}={}, best_mam={}, "
               "transport_mam={}, transport_time={} => TIME AT DEST {} IS "
@@ -679,7 +681,7 @@ private:
   raptor_state& state_;
   std::vector<bool>& is_dest_;
   std::vector<std::uint16_t>& dist_to_end_;
-  std::vector<std::uint16_t>& lb_;
+  std::vector<lower_bound>& lb_;
   std::array<delta_t, kMaxTransfers + 1> time_at_dest_;
   day_idx_t base_;
   int n_days_;

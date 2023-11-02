@@ -2,6 +2,7 @@
 
 #include "date/date.h"
 
+#include "utl/progress_tracker.h"
 #include "utl/helpers/algorithm.h"
 #include "utl/verify.h"
 
@@ -21,6 +22,8 @@ int main(int ac, char** av) {
                ac == 0U ? "nigiri-server" : av[0]);
     return 1;
   }
+
+  utl::activate_progress_tracker("import");
 
   auto loaders = std::vector<std::unique_ptr<loader_interface>>{};
   loaders.emplace_back(std::make_unique<gtfs::gtfs_loader>());
