@@ -10,4 +10,6 @@ mem_dir example_2_files();
 
 mem_dir berlin_files();
 
+mem_dir components_files();
+
 }  // namespace nigiri::loader::gtfs

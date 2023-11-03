@@ -183,6 +183,106 @@ loader::mem_dir example_2_files() {
        {path{kStopTimesFile}, std::string{example_2_stop_times_content}}}};
 }
 
+constexpr auto const components_calendar_file_content = std::string_view{
+    R"(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+WE,0,0,0,0,0,1,1,20060701,20060731
+WD,1,1,1,1,1,0,0,20060701,20060731
+)"};
+
+constexpr auto const components_calendar_dates_file_content =
+    R"(service_id,date,exception_type
+WD,20060703,2
+WE,20060703,1
+WD,20060704,2
+WE,20060704,1
+)";
+
+constexpr auto const components_stops_file_content = std::string_view{
+    R"(stop_id,stop_name,stop_desc,stop_lat,stop_lon,stop_url,location_type,parent_station
+S1,Mission St. & Silver Ave.,The stop is located at the southwest corner of the intersection.,37.728631,-122.431282,,,
+S2,Mission St. & Cortland Ave.,The stop is located 20 feet south of Mission St.,37.74103,-122.422482,,,
+S3,Mission St. & 24th St.,The stop is located at the southwest corner of the intersection.,37.75223,-122.418581,,,
+S4,Mission St. & 21st St.,The stop is located at the northwest corner of the intersection.,37.75713,-122.418982,,,
+S5,Mission St. & 18th St.,The stop is located 25 feet west of 18th St.,37.761829,-122.419382,,,
+S6,Mission St. & 15th St.,The stop is located 10 feet north of Mission St.,37.766629,-122.419782,,,
+S7,24th St. Mission Station,,37.752240,-122.418450,,,S8
+S8,24th St. Mission Station,,37.752240,-122.418450,http://www.bart.gov/stations/stationguide/stationoverview_24st.asp,1,
+S9,Silver Ave & Lisbon st.,The stop is located at the southwest corner of the intersection.,37.72855671157345,-122.42878526827214,,,
+S10,Silver Ave & Congdon St.,The stop is located 20 feet south of Congton St.,37.72863354771483, -122.426078218295,,,
+S11,Bayshore Blvd & Geneva Ave, Sample, 37.70513596514061, -122.40660267799535,,,
+S12,7 Mile House (Bayshore/Geneva), Sample, 37.704040717941844, -122.40758510626372,,,
+S13,Geneva Ave & Bayshore Blvd, Sample, 37.70509054046328, -122.4078849382677,,,
+)"};
+
+constexpr auto const components_agency_file_content = std::string_view{
+    R"(agency_id,agency_name,agency_url,agency_timezone
+DTA,Demo Transit Authority,http://google.com,America/Los_Angeles
+"11","Schweizerische Bundesbahnen SBB","http://www.sbb.ch/","Europe/Berlin","DE","0900 300 300 "
+)"};
+
+auto const components_routes_file_content = std::string_view{
+    R"(route_id,agency_id,route_short_name,route_long_name,route_desc,route_type
+A,DTA,17,Mission,"The ""A"" route travels from lower Mission to Downtown.",3
+B,DTA,44,Silver,"The ""B"" route travels from Mission to Silver.",3
+)"};
+
+constexpr auto const components_transfers_file_content =
+    std::string_view{R"(from_stop_id,to_stop_id,transfer_type,min_transfer_time
+S6,S7,2,300
+S9,S10,2,300
+S11,S12,2,300
+S13,S12,2,300
+)"};
+
+constexpr auto const components_trips_file_content =
+    R"(route_id,service_id,trip_id,trip_headsign,block_id
+A,WE,AWE1,Downtown,1
+A,WE,AWD1,Downtown,2
+B,WD,BWD1,Silver,3
+)";
+
+constexpr auto const components_frequencies_file_content =
+    std::string_view{R"(trip_id,start_time,end_time,headway_secs
+AWE1,05:30:00,06:30:00,300
+AWE1,06:30:00,20:30:00,180
+AWE1,20:30:00,28:00:00,420
+BWD1,08:00:00,18:00:00,600
+)"};
+
+constexpr auto const components_stop_times_content =
+    R"(trip_id,arrival_time,departure_time,stop_id,stop_sequence,pickup_type,drop_off_type
+AWD1,6:45,6:45,S6,6,0,0,0
+AWD1,,,S5,5,0,0,0
+AWD1,,,S4,4,0,0,0
+AWD1,6:20,6:20,S3,3,0,0,0
+AWD1,,,S2,2,0,0,0
+AWD1,6:10,6:10,S1,1,0,0,0
+AWE1,6:45,6:45,S6,5,0,0,0
+AWE1,,,S5,4,0,0,0
+AWE1,6:20,6:30,S3,3,0,0,0
+AWE1,,,S2,2,0,1,3
+AWE1,6:10,6:10,S1,1,0,0,0
+BWD1,8:10,8:10,S1,1,0,0,0
+BWD1,8:13,8:13,S9,2,0,0,0
+BWD1,8:15,8:15,S10,3,0,0,0
+)";
+
+loader::mem_dir components_files() {
+  using std::filesystem::path;
+  return {
+      {{path{kAgencyFile}, std::string{components_agency_file_content}},
+       {path{kStopFile}, std::string{components_stops_file_content}},
+       {path{kCalenderFile}, std::string{components_calendar_file_content}},
+       {path{kCalendarDatesFile},
+        std::string{components_calendar_dates_file_content}},
+       {path{kTransfersFile}, std::string{components_transfers_file_content}},
+       {path{kRoutesFile}, std::string{components_routes_file_content}},
+       {path{kFrequenciesFile}, std::string{components_frequencies_file_content}},
+       {path{kTripsFile}, std::string{components_trips_file_content}},
+       {path{kStopTimesFile}, std::string{components_stop_times_content}}}};
+}
+
+
 constexpr auto const berlin_agencies_file_content = std::string_view{
     R"(agency_id,agency_name,agency_url,agency_timezone,agency_lang,agency_phone
 ANG---,Günter Anger Güterverkehrs GmbH & Co. Omnibusvermietung KG,http://www.anger-busvermietung.de,Europe/Berlin,de,033208 22010

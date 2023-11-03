@@ -101,3 +101,36 @@ TEST(gtfs, find_components_test_2) {
         );
     }
 }
+
+TEST(gtfs, find_components_test_3) {
+    const auto files = components_files();
+
+    auto tt = timetable{};
+    tt.date_range_ = {2006_y / 7 / 1, 2006_y / 8 / 1};
+    load_timetable({}, source_idx_t{0U}, files, tt);
+    finalize(tt);
+
+    auto q = query{
+      .destination_ = {
+          {location_idx_t{9U}, 0_minutes, 0U}}};
+
+
+    std::vector<lower_bound> lb;
+    dijkstra(tt, q, tt.transfers_lb_graph_, lb);
+
+    ASSERT_EQ(
+        tt.locations_.next_component_idx_,
+        component_idx_t{8}
+    );
+
+        const vector<component_idx_t::value_t> expected_component = {
+        0U, 1U, 2U, 3U, 4U, 5U, 5U, 5U, 6U, 6U , 7U, 7U, 7U
+    };
+
+    for (auto i = 0U; i<tt.n_locations(); ++i) {
+        ASSERT_EQ(
+            tt.locations_.components_[location_idx_t{i}],
+            component_idx_t{expected_component[i]}
+        );
+    }
+}
