@@ -5,13 +5,14 @@
 
 #include "../loader/hrd/hrd_timetable.h"
 
-#include "../raptor_search.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 
 using namespace date;
 using namespace nigiri;
 using namespace nigiri::loader;
 using namespace nigiri::test_data::hrd_timetable;
-using nigiri::test::raptor_search;
+
+using nigiri::routing::raptor_search;
 
 constexpr auto const fwd_journeys = R"(
 [2020-03-30 05:00, 2020-03-30 07:15]

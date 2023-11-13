@@ -1,10 +1,13 @@
-#include "./raptor_search.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 
 #include "nigiri/routing/raptor/raptor.h"
 #include "nigiri/routing/search.h"
 #include "nigiri/timetable.h"
+#include "nigiri/routing/raptor/mc_raptor_state.h"
+#include "nigiri/routing/raptor/mc_raptor.h"
+#include "fmt/core.h"
 
-namespace nigiri::test {
+namespace nigiri::routing {
 
 unixtime_t parse_time(std::string_view s, char const* format) {
   std::stringstream in;
@@ -76,6 +79,36 @@ pareto_set<routing::journey> raptor_search(timetable const& tt,
                                            direction const search_dir) {
   return raptor_search(tt, rtt, from, to, parse_time(time, "%Y-%m-%d %H:%M %Z"),
                        search_dir);
+}
+
+pareto_set<routing::journey> raptor_search(timetable const& tt,
+                                           rt_timetable const* rtt,
+                                           std::string_view from,
+                                           std::string_view to,
+                                           std::string_view start_time,
+                                           std::string_view end_time,
+                                           direction const search_dir) {
+  interval<unixtime_t> inter;
+  inter.from_ = parse_time(start_time, "%Y-%m-%d %H:%M %Z");
+  inter.to_ = parse_time(end_time, "%Y-%m-%d %H:%M %Z");
+  return raptor_search(tt, rtt, from, to, inter,
+                       search_dir);
+}
+
+std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
+                                                           std::string_view from,
+                                                           std::string_view start_time,
+                                                           std::string_view end_time) {
+  auto const src = source_idx_t{0};
+  mc_raptor_state state{};
+
+  interval<unixtime_t> inter;
+  inter.from_ = parse_time(start_time, "%Y-%m-%d %H:%M %Z");
+  inter.to_ = parse_time(end_time, "%Y-%m-%d %H:%M %Z");
+  routing::mc_raptor raptor{tt, state, inter, location_match_mode::kExact, {{tt.locations_.location_id_to_idx_.at({from, src}), 0_minutes,
+                                                                    0U}}};
+  raptor.route();
+  return state.results_;
 }
 
 pareto_set<routing::journey> raptor_intermodal_search(

@@ -5,13 +5,13 @@
 #include "nigiri/loader/init_finish.h"
 #include "nigiri/timetable.h"
 
-#include "../../raptor_search.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 
 using namespace date;
 using namespace nigiri;
 using namespace nigiri::loader;
 using namespace nigiri::loader::gtfs;
-using nigiri::test::raptor_search;
+using nigiri::routing::raptor_search;
 
 constexpr auto const calendar = std::string_view{
     R"(service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date

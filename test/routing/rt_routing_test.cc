@@ -10,14 +10,14 @@
 
 #include "../loader/hrd/hrd_timetable.h"
 
-#include "../raptor_search.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 
 using namespace date;
 using namespace nigiri;
 using namespace nigiri::loader;
 using namespace nigiri::loader::gtfs;
 using namespace std::chrono_literals;
-using nigiri::test::raptor_search;
+using nigiri::routing::raptor_search;
 
 namespace {
 

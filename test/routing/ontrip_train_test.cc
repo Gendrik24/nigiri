@@ -6,15 +6,15 @@
 #include "nigiri/routing/ontrip_train.h"
 #include "nigiri/timetable.h"
 
+#include "nigiri/routing/raptor/raptor_search.h"
 #include "../loader/hrd/hrd_timetable.h"
-#include "../raptor_search.h"
 
 using namespace date;
 using namespace nigiri;
 using namespace nigiri::loader;
 using namespace nigiri::routing;
 using namespace nigiri::test_data::hrd_timetable;
-using nigiri::test::raptor_search;
+using nigiri::routing::raptor_search;
 
 TEST(routing, ontrip_train) {
   using namespace date;

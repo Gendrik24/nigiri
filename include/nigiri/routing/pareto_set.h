@@ -11,7 +11,7 @@ struct pareto_set {
   using iterator = typename std::vector<T>::iterator;
   using const_iterator = typename std::vector<T>::const_iterator;
 
-  size_t size() const { return els_.size(); }
+  std::size_t size() const { return els_.size(); }
 
   std::tuple<bool, iterator, iterator> add(T&& el) {
     auto n_removed = std::size_t{0};
@@ -44,6 +44,8 @@ struct pareto_set {
     return els_.erase(from, to);
   }
   void clear() { els_.clear(); }
+
+  bool empty() { return els_.empty(); }
 
 private:
   std::vector<T> els_;
