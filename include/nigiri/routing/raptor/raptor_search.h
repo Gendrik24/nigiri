@@ -29,6 +29,10 @@ std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
                                            std::string_view start_time,
                                            std::string_view end_time);
 
+std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
+                                                           std::string_view from,
+                                                           interval<unixtime_t> time);
+
 pareto_set<routing::journey> raptor_search(timetable const&,
                                            rt_timetable const*,
                                            std::string_view from,

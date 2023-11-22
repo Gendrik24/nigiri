@@ -111,6 +111,17 @@ std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
   return state.results_;
 }
 
+std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
+                                                           std::string_view from,
+                                                           interval<unixtime_t> time) {
+  auto const src = source_idx_t{0};
+  mc_raptor_state state{};
+  routing::mc_raptor raptor{tt, state, time, location_match_mode::kExact, {{tt.locations_.location_id_to_idx_.at({from, src}), 0_minutes,
+                                                                             0U}}};
+  raptor.route();
+  return state.results_;
+}
+
 pareto_set<routing::journey> raptor_intermodal_search(
     timetable const& tt,
     rt_timetable const* rtt,

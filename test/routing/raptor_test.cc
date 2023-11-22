@@ -13,6 +13,8 @@ using namespace nigiri::loader;
 using namespace nigiri::test_data::hrd_timetable;
 
 using nigiri::routing::raptor_search;
+using nigiri::routing::mc_raptor_search;
+using nigiri::routing::journey;
 
 constexpr auto const fwd_journeys = R"(
 [2020-03-30 05:00, 2020-03-30 07:15]
@@ -65,6 +67,43 @@ TEST(routing, raptor_forward) {
   std::stringstream ss;
   ss << "\n";
   for (auto const& x : results) {
+    x.print(ss, tt);
+    ss << "\n\n";
+  }
+  EXPECT_EQ(std::string_view{fwd_journeys}, ss.str());
+}
+
+bool journey_cmp(const journey& j1, const journey& j2) {
+  return j1.start_time_ < j2.start_time_;
+}
+
+TEST(routing, mc_raptor_forward) {
+  constexpr auto const src = source_idx_t{0U};
+
+  timetable tt;
+  tt.date_range_ = full_period();
+  load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
+  finalize(tt);
+
+  const auto dest_idx = tt.locations_.location_id_to_idx_.at({"0000003", src});
+
+  auto const results = mc_raptor_search(
+      tt,
+"0000001",
+interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
+                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours})[to_idx(dest_idx)];
+
+  std::vector<nigiri::routing::journey> results_as_vec{begin(results), end(results)};
+  std::sort(results_as_vec.begin(), results_as_vec.end(), journey_cmp);
+
+  auto const results_raptor = raptor_search(
+      tt, nullptr, "0000001", "0000003",
+      interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
+               unixtime_t{sys_days{2020_y / March / 30}} + 6_hours});
+
+  std::stringstream ss;
+  ss << "\n";
+  for (auto const& x : results_as_vec) {
     x.print(ss, tt);
     ss << "\n\n";
   }

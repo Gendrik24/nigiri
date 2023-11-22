@@ -8,8 +8,6 @@
 
 namespace nigiri::routing {
 
-using dep_arr_t = std::pair<routing_time, routing_time>;
-
 struct mc_raptor_stats {
     std::uint64_t n_routing_time_{0ULL};
     std::uint64_t n_footpaths_visited_{0ULL};
@@ -23,11 +21,13 @@ struct mc_raptor_stats {
 
 struct mc_raptor {
 
+    static constexpr bool kVerifyReconstruction = true;
+
     mc_raptor(timetable const& tt,
               mc_raptor_state& state,
-              interval<unixtime_t> const search_interval,
-              location_match_mode const start_match_mode,
-              std::vector<offset> const start);
+              interval<unixtime_t> search_interval,
+              location_match_mode start_match_mode,
+              std::vector<offset> const& start);
 
     void route();
     mc_raptor_stats const& get_stats() const;
@@ -36,26 +36,27 @@ private:
 
   bool is_better(auto a, auto b);
   bool is_better_or_eq(auto a, auto b);
-  auto get_best(auto a, auto b);
   void rounds();
 
   void reconstruct();
 
-  bool update_route(unsigned const k, route_idx_t route);
+  bool update_route(unsigned k, route_idx_t route);
   transport get_earliest_transport(const mc_raptor_label& current,
                                    route_idx_t const r,
                                    stop_idx_t stop_idx);
   void update_footpaths(unsigned const k);
 
   day_idx_t start_day_offset() const;
-  day_idx_t number_of_days_in_search_interval() const;
-  unsigned end_k() const;
+  static unsigned end_k() ;
   bool is_journey_start(location_idx_t l);
-  std::optional<journey::leg> find_start_footpath(location_idx_t const leg_start_location,
-                                                   routing_time const leg_start_time,
-                                                  routing_time const journey_start_time);
+  std::optional<journey::leg> find_start_footpath(location_idx_t leg_start_location,
+                                                   routing_time leg_start_time,
+                                                  routing_time journey_start_time);
 
-  interval<stop_idx_t> find_enter_exit(location_idx_t enter, location_idx_t exit, route_idx_t r);
+  interval<stop_idx_t> find_enter_exit(transport via,
+                                       location_idx_t enter,
+                                       routing_time enter_after,
+                                       location_idx_t exit);
 
   timetable const& tt_;
   std::uint16_t n_tt_days_;
@@ -65,6 +66,5 @@ private:
   std::uint32_t n_locations_, n_routes_;
   std::vector<offset> const start_;
   location_match_mode start_match_mode_;
-  unsigned int n_days_to_iterate_;
 };
 }
