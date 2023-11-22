@@ -38,6 +38,9 @@ private:
   bool is_better_or_eq(auto a, auto b);
   auto get_best(auto a, auto b);
   void rounds();
+
+  void reconstruct();
+
   bool update_route(unsigned const k, route_idx_t route);
   transport get_earliest_transport(const mc_raptor_label& current,
                                    route_idx_t const r,
@@ -47,6 +50,12 @@ private:
   day_idx_t start_day_offset() const;
   day_idx_t number_of_days_in_search_interval() const;
   unsigned end_k() const;
+  bool is_journey_start(location_idx_t l);
+  std::optional<journey::leg> find_start_footpath(location_idx_t const leg_start_location,
+                                                   routing_time const leg_start_time,
+                                                  routing_time const journey_start_time);
+
+  interval<stop_idx_t> find_enter_exit(location_idx_t enter, location_idx_t exit, route_idx_t r);
 
   timetable const& tt_;
   std::uint16_t n_tt_days_;

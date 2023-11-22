@@ -1,6 +1,8 @@
 #pragma once
 
 #include <vector>
+#include <optional>
+#include <variant>
 
 #include "date/date.h"
 
@@ -10,6 +12,8 @@
 #include "nigiri/routing/pareto_set.h"
 #include "nigiri/routing/journey.h"
 #include "nigiri/routing/routing_time.h"
+#include "nigiri/footpath.h"
+#include "nigiri/types.h"
 
 namespace nigiri {
 struct timetable;
@@ -18,15 +22,41 @@ struct timetable;
 namespace nigiri::routing {
 
 struct mc_raptor_label {
+  struct transport_leg {
+    transport_leg(location_idx_t enter,
+                  transport via,
+                  location_idx_t exit)
+        : enter_(enter),
+          via_(via),
+          exit_(exit) {}
+
+    location_idx_t enter_;
+    transport via_;
+    location_idx_t exit_;
+  };
+
+  struct footpath_leg {
+    footpath_leg(duration_t duration,
+                  location_idx_t target)
+        : duration_(duration),
+          target_(target) {}
+
+    duration_t duration_;
+    location_idx_t target_;
+  };
 
   mc_raptor_label()
-      : arrival_(routing_time::min()),
-        departure_(routing_time::max())
-  {}
+    : arrival_(routing_time::min()),
+      departure_(routing_time::max()) {}
 
-  mc_raptor_label(routing_time arr, routing_time dep) :
-    arrival_(arr),
-    departure_(dep) {}
+  mc_raptor_label(routing_time arrival, routing_time dep)
+    : arrival_(arrival),
+      departure_(dep) {}
+
+  mc_raptor_label(routing_time arrival, routing_time dep, pareto_set<mc_raptor_label>::const_iterator prev)
+      : arrival_(arrival),
+        departure_(dep),
+        prev_(prev) {}
 
   inline bool equals(const mc_raptor_label& other) const noexcept {
         return  arrival_ == other.arrival_ &&
@@ -37,35 +67,46 @@ struct mc_raptor_label {
         return  arrival_ <= other.arrival_ &&
                 departure_ >= other.departure_;
   }
-    routing_time arrival_;
-    routing_time departure_;
+
+  routing_time arrival_;
+  routing_time departure_;
+
+  pareto_set<mc_raptor_label>::const_iterator prev_;
+
+  std::optional<transport_leg> with_;
+  std::optional<footpath_leg> transfer_;
 };
 
 struct mc_raptor_route_label {
-    mc_raptor_route_label()
-        : transport_(transport{transport_idx_t::invalid(), day_idx_t::invalid()}),
-          departure_(routing_time::max())
-    {}
+  mc_raptor_route_label()
+      : transport_(transport{transport_idx_t::invalid(), day_idx_t::invalid()}),
+        departure_(routing_time::max()) {}
 
-    mc_raptor_route_label(transport transport,
-                          routing_time departure)
-        : transport_(transport),
-          departure_(departure)
-    {}
+  mc_raptor_route_label(transport transport,
+                        location_idx_t entered,
+                        routing_time departure,
+                        pareto_set<mc_raptor_label>::const_iterator prev)
+      : transport_(transport),
+        entered_(entered),
+        departure_(departure),
+        prev_(prev) {}
 
-    inline bool equals(const mc_raptor_route_label& other) const noexcept {
+  inline bool equals(const mc_raptor_route_label& other) const noexcept {
         return  departure_ == other.departure_ &&
                transport_.t_idx_ == other.transport_.t_idx_ &&
                transport_.day_ == other.transport_.day_;
-    }
+  }
 
-    inline bool dominates(const mc_raptor_route_label& other) const noexcept {
+  inline bool dominates(const mc_raptor_route_label& other) const noexcept {
         return  departure_ >= other.departure_ &&
                (transport_.day_ < other.transport_.day_ || (transport_.day_ == other.transport_.day_ && transport_.t_idx_ <= other.transport_.t_idx_));
-    }
+  }
 
-    transport transport_;
-    routing_time departure_;
+  transport transport_;
+  location_idx_t entered_;
+  routing_time departure_;
+
+  pareto_set<mc_raptor_label>::const_iterator prev_;
 };
 
 struct mc_raptor_state {
