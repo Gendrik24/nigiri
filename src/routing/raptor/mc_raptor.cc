@@ -5,7 +5,6 @@
 #include "nigiri/routing/raptor/mc_raptor_state.h"
 #include "nigiri/routing/for_each_meta.h"
 #include "nigiri/stop.h"
-#include "nigiri/common/overload.h"
 
 #include "utl/equal_ranges_linear.h"
 #include "utl/erase_if.h"
