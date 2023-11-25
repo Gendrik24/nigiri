@@ -24,7 +24,7 @@ mc_raptor::mc_raptor(timetable const& tt,
                      location_match_mode const start_match_mode,
                      std::vector<offset> const& start)
     : tt_{tt},
-      n_tt_days_{static_cast<std::uint16_t>(tt_.date_range_.size().count())},
+      n_tt_days_{tt_.internal_interval_days().size().count()},
       state_{state},
       search_interval_{search_interval},
       n_locations_{tt_.n_locations()},
@@ -243,8 +243,8 @@ transport mc_raptor::get_earliest_transport(const mc_raptor_label& current,
   auto const [day_at_stop, mam_at_stop] = time.day_idx_mam();
 
   auto const n_days_to_iterate =
-      std::min(kMaxTravelTime.count() / 1440U + 1,
-               n_tt_days_ - to_idx(day_at_stop) + 1U);
+      std::min(kMaxTravelTime.count() / 1440 + 1,
+               n_tt_days_ - static_cast<int>(day_at_stop.v_) + 1);
 
   auto const event_times =
       tt_.event_times_at_stop(r, stop_idx, event_type::kDep);
@@ -385,7 +385,7 @@ void mc_raptor::reconstruct() {
           r.stop_range_ = interval<stop_idx_t>{0, 0};
           const auto from_to = find_enter_exit(
               curr_transport_leg.via_, curr_transport_leg.enter_,
-              get<0>(prev_label->arrival_), curr_transport_leg.exit_);
+              get<1>(prev_label->arrival_), curr_transport_leg.exit_);
 
           if (kVerifyReconstruction) {
             const auto& stop_sequence = tt_.route_location_seq_[tt_.transport_route_[curr_transport_leg.via_.t_idx_]];
@@ -409,8 +409,9 @@ void mc_raptor::reconstruct() {
             if (get<1>(prev_label->arrival_).to_unixtime(tt_) > trans_dep_time) {
               nigiri::log(log_lvl::error,
                           "mc_raptor.reconstruction",
-                          "Not possible to enter transport {} at location {}, when arriving not earlier than {}",
+                          "Not possible to enter transport {} (Route {}) at location {}, when arriving not earlier than {}",
                           curr_transport_leg.via_,
+                          tt_.transport_route_[curr_transport_leg.via_.t_idx_],
                           curr_transport_leg.enter_,
                           get<1>(prev_label->arrival_).to_unixtime(tt_));
             }

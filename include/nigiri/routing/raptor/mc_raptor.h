@@ -65,7 +65,7 @@ private:
   duration_t get_fastest_direct(location_idx_t dest);
 
   timetable const& tt_;
-  std::uint16_t n_tt_days_;
+  int n_tt_days_;
   mc_raptor_state& state_;
   interval<unixtime_t> const search_interval_;
   mc_raptor_stats stats_;
