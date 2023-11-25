@@ -58,6 +58,12 @@ private:
                                        routing_time enter_after,
                                        location_idx_t exit);
 
+  duration_t get_fastest_start_dest_overlap(location_idx_t dest);
+
+  duration_t get_fastest_direct_with_foot(location_idx_t dest);
+
+  duration_t get_fastest_direct(location_idx_t dest);
+
   timetable const& tt_;
   std::uint16_t n_tt_days_;
   mc_raptor_state& state_;

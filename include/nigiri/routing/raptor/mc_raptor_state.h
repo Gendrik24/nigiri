@@ -46,15 +46,15 @@ struct mc_raptor_label {
   };
 
   mc_raptor_label()
-    : arrival_(routing_time::min()),
+    : arrival_(routing_time::min(), routing_time::min()),
       departure_(routing_time::max()) {}
 
-  mc_raptor_label(routing_time arrival, routing_time dep)
-    : arrival_(arrival),
+  mc_raptor_label(routing_time arrival, duration_t transfer_time, routing_time dep)
+    : arrival_(arrival, arrival + transfer_time),
       departure_(dep) {}
 
-  mc_raptor_label(routing_time arrival, routing_time dep, pareto_set<mc_raptor_label>::const_iterator prev)
-      : arrival_(arrival),
+  mc_raptor_label(routing_time arrival, duration_t transfer_time, routing_time dep, pareto_set<mc_raptor_label>::const_iterator prev)
+      : arrival_(arrival, arrival + transfer_time),
         departure_(dep),
         prev_(prev) {}
 
@@ -64,11 +64,11 @@ struct mc_raptor_label {
   }
 
   inline bool dominates(const mc_raptor_label& other) const noexcept {
-        return  arrival_ <= other.arrival_ &&
+        return  get<1>(arrival_) <= get<0>(other.arrival_) &&
                 departure_ >= other.departure_;
   }
 
-  routing_time arrival_;
+  std::tuple<routing_time, routing_time> arrival_;
   routing_time departure_;
 
   pareto_set<mc_raptor_label>::const_iterator prev_;

@@ -56,9 +56,9 @@ void mc_raptor::route() {
       [&](auto&& from_it, auto&& to_it) {
         for (auto const& s : it_range{from_it, to_it}) {
           state_.round_bags_[0U][to_idx(s.stop_)].add(mc_raptor_label(
-              {tt_, s.time_at_stop_}, {tt_, from_it->time_at_start_}));
+              {tt_, s.time_at_stop_}, 0_minutes, {tt_, from_it->time_at_start_}));
           state_.best_[to_idx(s.stop_)].add(mc_raptor_label(
-              {tt_, s.time_at_stop_}, {tt_, from_it->time_at_start_}));
+              {tt_, s.time_at_stop_}, 0_minutes, {tt_, from_it->time_at_start_}));
           state_.station_mark_[to_idx(s.stop_)] = true;
         }
       });
@@ -139,9 +139,8 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
           tt_.event_mam(route_idx, trip.t_idx_, stop_idx, event_type::kArr)
               .as_duration());
 
-      auto candidate_lbl =
-          mc_raptor_label{new_arr + transfer_time_offset,
-                          active_label.departure_, active_label.prev_};
+      auto candidate_lbl = mc_raptor_label{new_arr, transfer_time_offset,
+                            active_label.departure_, active_label.prev_};
 
       candidate_lbl.with_ = mc_raptor_label::transport_leg{
           active_label.entered_, trip, stp.location_idx()};
@@ -149,7 +148,7 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
           transfer_time_offset, stp.location_idx()};
 
       if (!stp.out_allowed() ||
-          (candidate_lbl.arrival_.offset_ - candidate_lbl.departure_.offset_) >
+          (get<0>(candidate_lbl.arrival_).offset_- candidate_lbl.departure_.offset_) >
               kMaxTravelTime.count()) {
         continue;
       }
@@ -174,10 +173,10 @@ bool mc_raptor::update_route(unsigned const k, route_idx_t route_idx) {
     if (stp.in_allowed() && state_.prev_station_mark_[l_idx]) {
       const auto& rb = state_.round_bags_[k - 1][cista::to_idx(l_idx)];
       for (auto rb_it = rb.begin(); rb_it != rb.end(); ++rb_it) {
+
         auto const new_et = get_earliest_transport(*rb_it, route_idx, stop_idx);
         if (new_et.is_valid()) {
-          r_b.add(mc_raptor_route_label{new_et, stp.location_idx(),
-                                        rb_it->departure_, rb_it});
+          r_b.add(mc_raptor_route_label{new_et, stp.location_idx(),rb_it->departure_, rb_it});
         }
       }
     }
@@ -197,17 +196,15 @@ void mc_raptor::update_footpaths(unsigned const k) {
     auto const fps = tt_.locations_.footpaths_out_[l_idx];
     for (auto const& fp : fps) {
       auto const target = fp.target_;
-      auto const fp_offset =
-          fp.duration_ - tt_.locations_.transfer_time_[l_idx].count();
       for (const auto& rl : round_bag) {
-        mc_raptor_label l_with_foot{rl.arrival_ + duration_t{fp_offset},
+        mc_raptor_label l_with_foot{get<0>(rl.arrival_) + fp.duration(), 0_minutes,
                                     rl.departure_, rl.prev_};
 
         l_with_foot.with_ = rl.with_;
         l_with_foot.transfer_ =
             mc_raptor_label::footpath_leg{fp.duration(), fp.target()};
 
-        if ((l_with_foot.arrival_.offset_ - l_with_foot.departure_.offset_) >
+        if ((get<0>(l_with_foot.arrival_).offset_ - l_with_foot.departure_.offset_) >
             kMaxTravelTime.count()) {
           continue;
         }
@@ -237,7 +234,8 @@ transport mc_raptor::get_earliest_transport(const mc_raptor_label& current,
                                             route_idx_t const r,
                                             stop_idx_t const stop_idx) {
 
-  auto time = current.arrival_;
+  auto time = get<1>(current.arrival_);
+
   if (time == kInvalidTime<direction::kForward>) {
     return {transport_idx_t::invalid(), day_idx_t::invalid()};
   }
@@ -291,6 +289,9 @@ transport mc_raptor::get_earliest_transport(const mc_raptor_label& current,
 
 void mc_raptor::reconstruct() {
   for (auto loc = 0U; loc != n_locations_; ++loc) {
+
+    const auto fastest_direct = get_fastest_direct(location_idx_t{loc});
+
     for (auto k = 0U; k != end_k() - 1; ++k) {
       auto const& round_bag = state_.round_bags_[k][loc];
       if (round_bag.size() == 0) {
@@ -299,10 +300,15 @@ void mc_raptor::reconstruct() {
       for (auto journey_it = round_bag.begin(); journey_it != round_bag.end();
            ++journey_it) {
 
+        const duration_t travel_time{std::abs((get<0>(journey_it->arrival_) - journey_it->departure_).count())};
+        if (travel_time >= fastest_direct) {
+          continue;
+        }
+
         auto const [optimal, it, _] = state_.results_[loc].add(
             journey{.legs_ = {},
                     .start_time_ = journey_it->departure_.to_unixtime(tt_),
-                    .dest_time_ = journey_it->arrival_.to_unixtime(tt_),
+                    .dest_time_ = get<0>(journey_it->arrival_).to_unixtime(tt_),
                     .dest_ = location_idx_t{loc},
                     .transfers_ = static_cast<std::uint8_t>(k - 1)});
 
@@ -323,18 +329,21 @@ void mc_raptor::reconstruct() {
                 "No Transfer or Transport leg given for the current label!\n");
           }
 
-          const auto target_time = current_label->arrival_;
+          const auto target_time = get<0>(current_label->arrival_);
 
           const auto& curr_transfer_leg = *curr_opt_transfer;
           const auto& curr_transport_leg = *curr_opt_transport;
 
           const auto& prev_label = current_label->prev_;
-          const auto im_time =
-              current_label->arrival_ - curr_transfer_leg.duration_;
 
+          if (curr_transport_leg.exit_ == curr_transfer_leg.target_ && i == k) {
 
+            it->add(journey::leg{direction::kForward, curr_transfer_leg.target_,
+                curr_transfer_leg.target_,
+                target_time.to_unixtime(tt_), target_time.to_unixtime(tt_),
+                 footpath{curr_transfer_leg.target_, 0_minutes}});
 
-          if (i < k || curr_transport_leg.exit_ != curr_transfer_leg.target_) {
+          } else {
 
             if (kVerifyReconstruction) {
               const auto& fps = tt_.locations_.footpaths_out_[curr_transport_leg.exit_];
@@ -361,17 +370,14 @@ void mc_raptor::reconstruct() {
 
             it->add(journey::leg{direction::kForward, curr_transport_leg.exit_,
                                  curr_transfer_leg.target_,
-                                 im_time.to_unixtime(tt_),
-                                 target_time.to_unixtime(tt_),
-                                 footpath{curr_transport_leg.exit_,
-                                          curr_transfer_leg.duration_}});
-          } else if (i == k) {
-            it->dest_time_ = it->dest_time_ - curr_transfer_leg.duration_;
-            it->add(
-                journey::leg{direction::kForward, curr_transfer_leg.target_,
-                             curr_transfer_leg.target_,
-                             im_time.to_unixtime(tt_), im_time.to_unixtime(tt_),
-                             footpath{curr_transfer_leg.target_, 0_minutes}});
+                                 (target_time +
+                                    (curr_transport_leg.exit_ == curr_transfer_leg.target_ ? 0 : -1)
+                                    * curr_transfer_leg.duration_).to_unixtime(tt_),
+                                 (target_time +
+                                  (curr_transport_leg.exit_ == curr_transfer_leg.target_ ? 1 : 0)
+                                      * curr_transfer_leg.duration_).to_unixtime(tt_),
+                                 footpath{curr_transfer_leg.target_,
+                  curr_transfer_leg.duration_}});
           }
 
           nigiri::rt::run r;
@@ -379,7 +385,7 @@ void mc_raptor::reconstruct() {
           r.stop_range_ = interval<stop_idx_t>{0, 0};
           const auto from_to = find_enter_exit(
               curr_transport_leg.via_, curr_transport_leg.enter_,
-              prev_label->arrival_, curr_transport_leg.exit_);
+              get<0>(prev_label->arrival_), curr_transport_leg.exit_);
 
           if (kVerifyReconstruction) {
             const auto& stop_sequence = tt_.route_location_seq_[tt_.transport_route_[curr_transport_leg.via_.t_idx_]];
@@ -396,21 +402,24 @@ void mc_raptor::reconstruct() {
           const auto trans_dep_time =
               tt_.event_time(r.t_, from_to.from_, event_type::kDep);
 
+          const auto trans_arr_time =
+              tt_.event_time(r.t_, from_to.to_, event_type::kArr);
+
           if (kVerifyReconstruction) {
-            if (prev_label->arrival_.to_unixtime(tt_) > trans_dep_time) {
+            if (get<1>(prev_label->arrival_).to_unixtime(tt_) > trans_dep_time) {
               nigiri::log(log_lvl::error,
                           "mc_raptor.reconstruction",
                           "Not possible to enter transport {} at location {}, when arriving not earlier than {}",
                           curr_transport_leg.via_,
                           curr_transport_leg.enter_,
-                          prev_label->arrival_.to_unixtime(tt_));
+                          get<1>(prev_label->arrival_).to_unixtime(tt_));
             }
           }
 
           it->add(journey::leg{
               direction::kForward, curr_transport_leg.enter_,
               curr_transport_leg.exit_, trans_dep_time,
-              im_time.to_unixtime(tt_),
+              trans_arr_time,
               journey::run_enter_exit{r, from_to.from_, from_to.to_}});
 
           if (i == 1) {
@@ -426,7 +435,7 @@ void mc_raptor::reconstruct() {
         }
         if (!is_journey_start(target_after_init_transfer)) {
           auto init_fp = find_start_footpath(target_after_init_transfer,
-                                             current_label->arrival_,
+                                             get<1>(current_label->arrival_),
                                              current_label->departure_);
           if (!init_fp.has_value()) {
             throw utl::fail("No initial footpath found!\n");
@@ -506,5 +515,37 @@ std::optional<journey::leg> mc_raptor::find_start_footpath(
 
   return std::nullopt;
 }
+
+duration_t mc_raptor::get_fastest_start_dest_overlap(location_idx_t dest) {
+  auto min = duration_t{std::numeric_limits<duration_t::rep>::max()};
+  for (auto const& s : start_) {
+    for_each_meta(tt_, start_match_mode_, s.target_,
+                  [&](location_idx_t const start) {
+                      if (start == dest) {
+                        min = std::min(min, s.duration_);
+                      }
+                  });
+  }
+  return min;
+}
+
+duration_t mc_raptor::get_fastest_direct_with_foot(location_idx_t dest) {
+  auto min = duration_t{std::numeric_limits<duration_t::rep>::max()};
+  for (auto const& start : start_) {
+    auto const& footpaths = tt_.locations_.footpaths_out_;
+    for (auto const& fp : footpaths[start.target_]) {
+        if (dest == fp.target()) {
+          min = std::min(min, start.duration_ + fp.duration());
+        }
+    }
+  }
+  return min;
+}
+
+duration_t mc_raptor::get_fastest_direct(location_idx_t const dest) {
+  return std::min(get_fastest_direct_with_foot(dest),
+                  get_fastest_start_dest_overlap(dest));
+}
+
 
 }
