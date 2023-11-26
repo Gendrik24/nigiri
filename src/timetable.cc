@@ -7,6 +7,8 @@
 
 #include "nigiri/common/day_list.h"
 #include "nigiri/rt/frun.h"
+#include "nigiri/logging.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 
 namespace nigiri {
 
@@ -16,6 +18,10 @@ constexpr auto const kMode =
 std::string reverse(std::string s) {
   std::reverse(s.begin(), s.end());
   return s;
+}
+
+inline bool contains(interval<unixtime_t> i1, interval<unixtime_t> i2) {
+  return i1.from_ <= i2.from_ && i1.to_ >= i2.to_;
 }
 
 void timetable::locations::resolve_timezones() {
@@ -113,6 +119,140 @@ void timetable::write(cista::memory_holder& mem) const {
                                b = std::move(writer.buf_);
                              }},
              mem);
+}
+
+void timetable::add_reach_store_for(const interval<nigiri::unixtime_t> time_range) {
+  if (! contains(internal_interval(), time_range)) {
+    return;
+  }
+  reach_store rs;
+  rs.valid_range_ = time_range;
+  init_reach_store(rs);
+
+  for (std::size_t loc_start = 9U; loc_start < n_locations(); ++loc_start) {
+    nigiri::log(nigiri::log_lvl::info,
+                "reach_store",
+                "Starting to calculate reach values for journeys starting from location {}/{}",
+                loc_start, n_locations());
+    const auto& results = nigiri::routing::mc_raptor_search(*this,
+                                                            location{*this, location_idx_t{loc_start}}.id_,
+                                                            rs.valid_range_);
+
+
+    for (std::size_t loc_tgt = 0U; loc_tgt < n_locations(); ++loc_tgt) {
+      compute_reach_and_update(rs, results[loc_tgt]);
+    }
+  }
+  reach_stores_.push_back(rs);
+}
+
+void timetable::init_reach_store(reach_store& rs) {
+
+    rs.location_reach_.resize(n_locations(), 0U);
+
+    rs.route_location_reach_.resize(0U);
+
+    rs.route_reach_value_ranges_.resize(0U);
+    rs.reach_values_.resize(0U);
+
+    for (auto r = route_idx_t{0}; r < n_routes(); r++) {
+      const auto n_stops = route_location_seq_[r].size();
+      std::size_t l = n_stops;
+      std::vector<reach_t> v;
+      v.resize(l);
+      std::fill(v.begin(), v.end(), 0U);
+      rs.route_location_reach_.emplace_back(v);
+
+      const auto n_trips = route_transport_ranges_[r].size();
+      std::vector<reach_t> f;
+      f.resize(to_idx(n_trips) * n_stops);
+      std::fill(f.begin(), f.end(), 0U);
+      rs.route_reach_value_ranges_.emplace_back(rs.reach_values_.size(), rs.reach_values_.size() + f.size());
+      rs.reach_values_.insert(rs.reach_values_.end(), f.begin(), f.end());
+    }
+}
+
+reach_t timetable::get_location_reach(reach_store const& rs, location_idx_t loc) const {
+    return rs.location_reach_[to_idx(loc)];
+}
+
+reach_t timetable::get_route_location_reach(reach_store const& rs,
+                                            location_idx_t loc,
+                                            route_idx_t r) const {
+    return rs.route_location_reach_[r][to_idx(loc)];
+}
+
+
+reach_t timetable::get_trip_location_reach(reach_store const& rs,
+                                           stop_idx_t s,
+                                           transport_idx_t t) const {
+    const auto r = transport_route_[t];
+    const auto& range = rs.route_reach_value_ranges_[r];
+    const auto& trip_range = route_transport_ranges_[r];
+    const auto t_offset = t - route_transport_ranges_[r].from_;
+
+    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size()) + to_idx(t_offset)];
+}
+
+
+void timetable::attempt_update_location_reach(reach_store& rs,
+                                              location_idx_t loc,
+                                              reach_t reach) const {
+    rs.location_reach_[to_idx(loc)] = std::max(reach, get_location_reach(rs, loc));
+}
+
+
+void timetable::attempt_update_route_location_reach(reach_store& rs,
+                                                    location_idx_t loc,
+                                                    route_idx_t r,
+                                                    reach_t reach) const {
+    rs.route_location_reach_[r][to_idx(loc)] = std::max(reach, get_route_location_reach(rs, loc, r));
+}
+
+void timetable::attempt_update_trip_location_reach(reach_store& rs,
+                                                   stop_idx_t s,
+                                                   transport_idx_t t,
+                                                   reach_t reach) {
+    const auto r = transport_route_[t];
+    const auto& range = rs.route_reach_value_ranges_[r];
+    const auto& trip_range = route_transport_ranges_[r];
+    const auto r_idx = range.from_ + s * to_idx(trip_range.size()) + to_idx(t - route_transport_ranges_[r].from_);
+    rs.reach_values_[r_idx] = std::max(reach, rs.reach_values_[r_idx]);
+}
+
+void timetable::compute_reach_and_update(reach_store& rs,
+                                         const nigiri::routing::journey& j) {
+    const std::uint8_t n_transports = j.transfers_ + 1U;
+    auto n_transports_left = n_transports;
+    for (auto const& leg : j.legs_) {
+      std::uint8_t n_transports_right = n_transports - n_transports_left;
+      reach_t reach = 0U;
+      // Handle target of leg
+      reach = std::min(n_transports_left, n_transports_right);
+      attempt_update_location_reach(rs, leg.to_, reach);
+
+      // Handle origin of leg
+      if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
+      const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
+
+      n_transports_left--;
+      n_transports_right++;
+
+      reach = std::min(n_transports_left, n_transports_right);
+      const auto t_idx = run.r_.t_.t_idx_;
+
+      attempt_update_location_reach(rs, leg.from_, reach);
+      attempt_update_route_location_reach(rs, leg.from_, transport_route_[t_idx], reach);
+      attempt_update_trip_location_reach(rs, run.stop_range_.from_, t_idx, reach);
+      }
+    }
+}
+
+void timetable::compute_reach_and_update(reach_store& rs,
+                                         const pareto_set<nigiri::routing::journey>& journeys) {
+    for (const auto& j : journeys) {
+      compute_reach_and_update(rs, j);
+    }
 }
 
 }  // namespace nigiri
