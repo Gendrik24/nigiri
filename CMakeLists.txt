@@ -90,6 +90,12 @@ add_executable(nigiri-server ${nigiri-server-files})
 target_link_libraries(nigiri-server PRIVATE nigiri)
 target_compile_features(nigiri-server PUBLIC cxx_std_23)
 
+# --- REACH ---
+file(GLOB_RECURSE nigiri-reach-files reach/main.cc)
+add_executable(nigiri-reach ${nigiri-reach-files})
+target_link_libraries(nigiri-reach PRIVATE nigiri)
+target_compile_features(nigiri-reach PUBLIC cxx_std_23)
+
 
 # --- TEST ---
 add_library(nigiri-generated INTERFACE)

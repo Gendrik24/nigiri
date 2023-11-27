@@ -16,6 +16,17 @@
 namespace nigiri::routing {
 
 struct raptor_stats {
+  CISTA_PRINTABLE(raptor_stats,
+                  "n_routing_time",
+                  "n_footpaths_visited",
+                  "n_routes_visited",
+                  "n_earliest_trip_calls",
+                  "n_earliest_arrival_update_by_route",
+                  "n_earliest_arrival_updated_by_footpath",
+                  "fp_update_prevented_by_lower_bound",
+                  "route_update_prevented_by_lower_bound",
+                  "route_update_prevented_by_reach",
+                  "fp_update_prevented_by_reach")
   std::uint64_t n_routing_time_{0ULL};
   std::uint64_t n_footpaths_visited_{0ULL};
   std::uint64_t n_routes_visited_{0ULL};
@@ -24,6 +35,8 @@ struct raptor_stats {
   std::uint64_t n_earliest_arrival_updated_by_footpath_{0ULL};
   std::uint64_t fp_update_prevented_by_lower_bound_{0ULL};
   std::uint64_t route_update_prevented_by_lower_bound_{0ULL};
+  std::uint64_t route_update_prevented_by_reach_{0ULL};
+  std::uint64_t fp_update_prevented_by_reach_{0ULL};
 };
 
 template <direction SearchDir, bool Rt>
@@ -33,6 +46,7 @@ struct raptor {
 
   static constexpr bool kUseLowerBounds = true;
   static constexpr bool kUseTransfersLowerBounds = false;
+  static constexpr bool kUseReachValues = true;
   static constexpr auto const kFwd = (SearchDir == direction::kForward);
   static constexpr auto const kBwd = (SearchDir == direction::kBackward);
   static constexpr auto const kInvalid = kInvalidDelta<SearchDir>;
@@ -56,7 +70,8 @@ struct raptor {
          std::vector<bool>& is_dest,
          std::vector<std::uint16_t>& dist_to_dest,
          std::vector<lower_bound>& lb,
-         day_idx_t const base)
+         day_idx_t const base,
+         bool use_reach_if_available = false)
       : tt_{tt},
         rtt_{rtt},
         state_{state},
@@ -67,7 +82,8 @@ struct raptor {
         n_days_{tt_.internal_interval_days().size().count()},
         n_locations_{tt_.n_locations()},
         n_routes_{tt.n_routes()},
-        n_rt_transports_{Rt ? rtt->n_rt_transports() : 0U} {
+        n_rt_transports_{Rt ? rtt->n_rt_transports() : 0U},
+        use_reach_if_available_{use_reach_if_available} {
     state_.resize(n_locations_, n_routes_, n_rt_transports_);
     utl::fill(time_at_dest_, kInvalid);
     state_.round_times_.reset(kInvalid);
@@ -101,7 +117,8 @@ struct raptor {
   void execute(unixtime_t const start_time,
                std::uint8_t const max_transfers,
                unixtime_t const worst_time_at_dest,
-               pareto_set<journey>& results) {
+               pareto_set<journey>& results,
+               vector<timetable::reach_store>::const_iterator rs) {
     auto const end_k = std::min(max_transfers, kMaxTransfers) + 1U;
 
     auto const d_worst_at_dest = unix_to_delta(base(), worst_time_at_dest);
@@ -149,7 +166,7 @@ struct raptor {
         if (state_.route_mark_[r_id]) {
           ++stats_.n_routes_visited_;
           trace("┊ ├k={} updating route {}\n", k, r_id);
-          any_marked |= update_route(k, route_idx_t{r_id});
+          any_marked |= update_route(k, route_idx_t{r_id}, rs);
         }
       }
       if constexpr (Rt) {
@@ -172,8 +189,8 @@ struct raptor {
       std::swap(state_.prev_station_mark_, state_.station_mark_);
       utl::fill(state_.station_mark_, false);
 
-      update_transfers(k);
-      update_footpaths(k);
+      update_transfers(k, rs);
+      update_footpaths(k, rs);
       update_intermodal_footpaths(k);
 
       trace_print_state_after_round();
@@ -216,7 +233,7 @@ private:
     return tt_.internal_interval_days().from_ + as_int(base_) * date::days{1};
   }
 
-  void update_transfers(unsigned const k) {
+  void update_transfers(unsigned const k, vector<timetable::reach_store>::const_iterator rs) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -236,6 +253,12 @@ private:
           continue;
         }
 
+        if (use_reach_if_available_ && rs != tt_.reach_stores_.end() &&
+            rs->location_reach_[i] < k && rs->location_reach_[i] < lb_[i].transports_) {
+          ++stats_.fp_update_prevented_by_reach_;
+          continue;
+        }
+
         ++stats_.n_earliest_arrival_updated_by_footpath_;
         state_.round_times_[k][i] = fp_target_time;
         state_.best_[i] = fp_target_time;
@@ -247,7 +270,7 @@ private:
     }
   }
 
-  void update_footpaths(unsigned const k) {
+  void update_footpaths(unsigned const k, vector<timetable::reach_store>::const_iterator rs) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -277,6 +300,12 @@ private:
                 state_.best_[to_idx(fp.target())], fp_target_time, lower_bound,
                 to_unix(clamp(fp_target_time + dir(lower_bound))),
                 to_unix(time_at_dest_[k]));
+            continue;
+          }
+
+          if (use_reach_if_available_ && rs != tt_.reach_stores_.end() &&
+              rs->location_reach_[target] < k && rs->location_reach_[target] < lb_[target].transports_) {
+            ++stats_.fp_update_prevented_by_reach_;
             continue;
           }
 
@@ -388,7 +417,7 @@ private:
     return any_marked;
   }
 
-  bool update_route(unsigned const k, route_idx_t const r) {
+  bool update_route(unsigned const k, route_idx_t const r, vector<timetable::reach_store>::const_iterator rs) {
     auto const stop_seq = tt_.route_location_seq_[r];
     bool any_marked = false;
 
@@ -432,6 +461,14 @@ private:
               by_transport, current_best,
               !is_better(by_transport, current_best) ? "NOT" : "",
               location{tt_, stp.location_idx()});
+
+          if (use_reach_if_available_ && rs != tt_.reach_stores_.end()) {
+            const auto reach = tt_.get_trip_location_reach(*rs, stop_idx, et.t_idx_);
+            if (reach < k && reach < lb_[l_idx].transports_) {
+              ++stats_.route_update_prevented_by_reach_;
+              continue;
+            }
+          }
 
           ++stats_.n_earliest_arrival_updated_by_route_;
           state_.tmp_[l_idx] = get_best(by_transport, state_.tmp_[l_idx]);
@@ -687,6 +724,7 @@ private:
   int n_days_;
   raptor_stats stats_;
   std::uint32_t n_locations_, n_routes_, n_rt_transports_;
+  bool use_reach_if_available_;
 };
 
 }  // namespace nigiri::routing

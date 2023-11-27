@@ -227,23 +227,23 @@ void timetable::compute_reach_and_update(reach_store& rs,
     for (auto const& leg : j.legs_) {
       std::uint8_t n_transports_right = n_transports - n_transports_left;
       reach_t reach = 0U;
-      // Handle target of leg
+
       reach = std::min(n_transports_left, n_transports_right);
       attempt_update_location_reach(rs, leg.to_, reach);
 
-      // Handle origin of leg
       if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
       const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
+      const auto t_idx = run.r_.t_.t_idx_;
+
+      attempt_update_route_location_reach(rs, leg.to_, transport_route_[t_idx], reach);
+      attempt_update_trip_location_reach(rs, run.stop_range_.to_, t_idx, reach);
 
       n_transports_left--;
       n_transports_right++;
 
       reach = std::min(n_transports_left, n_transports_right);
-      const auto t_idx = run.r_.t_.t_idx_;
 
       attempt_update_location_reach(rs, leg.from_, reach);
-      attempt_update_route_location_reach(rs, leg.from_, transport_route_[t_idx], reach);
-      attempt_update_trip_location_reach(rs, run.stop_range_.from_, t_idx, reach);
       }
     }
 }
@@ -253,6 +253,10 @@ void timetable::compute_reach_and_update(reach_store& rs,
     for (const auto& j : journeys) {
       compute_reach_and_update(rs, j);
     }
+}
+
+bool timetable::reach_store::valid_for(interval<unixtime_t> const inter) const {
+  return valid_range_.from_ <= inter.from_ && inter.to_ <= valid_range_.to_;
 }
 
 }  // namespace nigiri

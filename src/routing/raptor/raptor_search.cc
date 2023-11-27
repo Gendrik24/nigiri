@@ -1,5 +1,6 @@
 #include "nigiri/routing/raptor/raptor_search.h"
 
+#include "nigiri/common/parse_time.h"
 #include "nigiri/routing/raptor/raptor.h"
 #include "nigiri/routing/search.h"
 #include "nigiri/timetable.h"
@@ -9,58 +10,47 @@
 
 namespace nigiri::routing {
 
-unixtime_t parse_time(std::string_view s, char const* format) {
-  std::stringstream in;
-  in << s;
-
-  date::local_seconds ls;
-  std::string tz;
-  in >> date::parse(format, ls, tz);
-
-  return std::chrono::time_point_cast<unixtime_t::duration>(
-      date::make_zoned(tz, ls).get_sys_time());
-}
-
 template <direction SearchDir>
-pareto_set<routing::journey> raptor_search(timetable const& tt,
+routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
-                                           routing::query q) {
+                                           routing::query q,
+                                           bool use_reach) {
   using algo_state_t = routing::raptor_state;
   static auto search_state = routing::search_state{};
   static auto algo_state = algo_state_t{};
 
   if (rtt == nullptr) {
     using algo_t = routing::raptor<SearchDir, false>;
-    return *(routing::search<SearchDir, algo_t>{tt, rtt, search_state,
-                                                algo_state, std::move(q)}
-                 .execute()
-                 .journeys_);
+    return routing::search<SearchDir, algo_t>{tt, rtt, search_state,
+                                                algo_state, std::move(q), use_reach}
+                 .execute();
   } else {
     using algo_t = routing::raptor<SearchDir, true>;
-    return *(routing::search<SearchDir, algo_t>{tt, rtt, search_state,
-                                                algo_state, std::move(q)}
-                 .execute()
-                 .journeys_);
+    return routing::search<SearchDir, algo_t>{tt, rtt, search_state,
+                                                algo_state, std::move(q), use_reach}
+                 .execute();
   }
 }
 
-pareto_set<routing::journey> raptor_search(timetable const& tt,
+routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            routing::query q,
-                                           direction const search_dir) {
+                                           direction const search_dir,
+                                           bool use_reach) {
   if (search_dir == direction::kForward) {
-    return raptor_search<direction::kForward>(tt, rtt, std::move(q));
+    return raptor_search<direction::kForward>(tt, rtt, std::move(q), use_reach);
   } else {
-    return raptor_search<direction::kBackward>(tt, rtt, std::move(q));
+    return raptor_search<direction::kBackward>(tt, rtt, std::move(q), use_reach);
   }
 }
 
-pareto_set<routing::journey> raptor_search(timetable const& tt,
+routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            std::string_view from,
                                            std::string_view to,
                                            routing::start_time_t time,
-                                           direction const search_dir) {
+                                           direction const search_dir,
+                                           bool use_reach) {
   auto const src = source_idx_t{0};
   auto q = routing::query{
       .start_time_ = time,
@@ -68,31 +58,33 @@ pareto_set<routing::journey> raptor_search(timetable const& tt,
                   0U}},
       .destination_ = {
           {tt.locations_.location_id_to_idx_.at({to, src}), 0_minutes, 0U}}};
-  return raptor_search(tt, rtt, std::move(q), search_dir);
+  return raptor_search(tt, rtt, std::move(q), search_dir, use_reach);
 }
 
-pareto_set<routing::journey> raptor_search(timetable const& tt,
+routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            std::string_view from,
                                            std::string_view to,
                                            std::string_view time,
-                                           direction const search_dir) {
+                                           direction const search_dir,
+                                           bool use_reach) {
   return raptor_search(tt, rtt, from, to, parse_time(time, "%Y-%m-%d %H:%M %Z"),
-                       search_dir);
+                       search_dir, use_reach);
 }
 
-pareto_set<routing::journey> raptor_search(timetable const& tt,
+routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            std::string_view from,
                                            std::string_view to,
                                            std::string_view start_time,
                                            std::string_view end_time,
-                                           direction const search_dir) {
+                                           direction const search_dir,
+                                           bool use_reach) {
   interval<unixtime_t> inter;
   inter.from_ = parse_time(start_time, "%Y-%m-%d %H:%M %Z");
   inter.to_ = parse_time(end_time, "%Y-%m-%d %H:%M %Z");
   return raptor_search(tt, rtt, from, to, inter,
-                       search_dir);
+                       search_dir, use_reach);
 }
 
 std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
@@ -122,16 +114,16 @@ std::vector<pareto_set<routing::journey>> mc_raptor_search(timetable const& tt,
   return state.results_;
 }
 
-pareto_set<routing::journey> raptor_intermodal_search(
-    timetable const& tt,
-    rt_timetable const* rtt,
-    std::vector<routing::offset> start,
-    std::vector<routing::offset> destination,
-    routing::start_time_t const interval,
-    direction const search_dir,
-    std::uint8_t const min_connection_count,
-    bool const extend_interval_earlier,
-    bool const extend_interval_later) {
+routing_result<raptor_stats> raptor_intermodal_search(
+                          timetable const& tt,
+                          rt_timetable const* rtt,
+                          std::vector<routing::offset> start,
+                          std::vector<routing::offset> destination,
+                          routing::start_time_t const interval,
+                          direction const search_dir,
+                          std::uint8_t const min_connection_count,
+                          bool const extend_interval_earlier,
+                          bool const extend_interval_later) {
   auto q = routing::query{
       .start_time_ = interval,
       .start_match_mode_ = routing::location_match_mode::kIntermodal,

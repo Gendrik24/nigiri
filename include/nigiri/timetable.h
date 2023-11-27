@@ -451,6 +451,8 @@ struct timetable {
 
   struct reach_store {
 
+    bool valid_for(interval<unixtime_t> const inter) const;
+
     interval<unixtime_t> valid_range_;
 
     vector<reach_t> location_reach_;

@@ -1,4 +1,6 @@
 #include <vector>
+#include <sstream>
+#include <filesystem>
 
 #include "date/date.h"
 
@@ -10,13 +12,19 @@
 #include "nigiri/loader/hrd/loader.h"
 #include "nigiri/loader/init_finish.h"
 #include "nigiri/logging.h"
+#include "nigiri/routing/dijkstra.h"
+#include "nigiri/routing/raptor/raptor_search.h"
 #include "nigiri/timetable.h"
+
+#include "cista/targets/file.h"
 
 using namespace date;
 using namespace nigiri;
 using namespace nigiri::loader;
+using namespace nigiri::routing;
 
 int main(int ac, char** av) {
+
   if (ac != 2) {
     fmt::print("usage: {} [TIMETABLE_PATH]\n",
                ac == 0U ? "nigiri-server" : av[0]);
@@ -25,27 +33,44 @@ int main(int ac, char** av) {
 
   utl::activate_progress_tracker("import");
 
-  auto loaders = std::vector<std::unique_ptr<loader_interface>>{};
-  loaders.emplace_back(std::make_unique<gtfs::gtfs_loader>());
-  loaders.emplace_back(std::make_unique<hrd::hrd_5_00_8_loader>());
-  loaders.emplace_back(std::make_unique<hrd::hrd_5_20_26_loader>());
-  loaders.emplace_back(std::make_unique<hrd::hrd_5_20_39_loader>());
-  loaders.emplace_back(std::make_unique<hrd::hrd_5_20_avv_loader>());
-
-  auto const src = source_idx_t{0U};
-  auto const tt_path = std::filesystem::path{av[1]};
-  auto const d = make_dir(tt_path);
-
-  auto const c =
-      utl::find_if(loaders, [&](auto&& l) { return l->applicable(*d); });
-  utl::verify(c != end(loaders), "no loader applicable to {}", tt_path);
-  log(log_lvl::info, "main", "loading nigiri timetable with configuration {}",
-      (*c)->name());
-
   timetable tt;
-  tt.date_range_ = {date::sys_days{April / 1 / 2023},
-                    date::sys_days{December / 1 / 2023}};
-  register_special_stations(tt);
-  (*c)->load({}, src, *d, tt);
-  finalize(tt);
+  if (std::filesystem::is_regular_file(av[1])) {
+    cista::file f{av[1], "r"};
+    tt = *timetable::read(f.content());
+  } else {
+    auto loaders = std::vector<std::unique_ptr<loader_interface>>{};
+    loaders.emplace_back(std::make_unique<gtfs::gtfs_loader>());
+    loaders.emplace_back(std::make_unique<hrd::hrd_5_00_8_loader>());
+    loaders.emplace_back(std::make_unique<hrd::hrd_5_20_26_loader>());
+    loaders.emplace_back(std::make_unique<hrd::hrd_5_20_39_loader>());
+    loaders.emplace_back(std::make_unique<hrd::hrd_5_20_avv_loader>());
+
+    auto const src = source_idx_t{0U};
+    auto const tt_path = std::filesystem::path{av[1]};
+    auto const d = make_dir(tt_path);
+
+    auto const c =
+        utl::find_if(loaders, [&](auto&& l) { return l->applicable(*d); });
+    utl::verify(c != end(loaders), "no loader applicable to {}", tt_path);
+    log(log_lvl::info, "main", "loading nigiri timetable with configuration {}",
+        (*c)->name());
+
+    tt.date_range_ = {date::sys_days{January / 11 / 2021},
+                      date::sys_days{January / 18 / 2021}};
+    register_special_stations(tt);
+    (*c)->load({}, src, *d, tt);
+    finalize(tt);
+  }
+
+  const auto routing_result = raptor_search(tt, nullptr, location{tt, location_idx_t{59U}}.id_, location{tt, location_idx_t{3400U}}.id_,
+                                            "2021-1-14 13:30 UTC", "2021-1-14 16:30 UTC", direction::kForward, true);
+
+  std::stringstream ss;
+  ss << routing_result.algo_stats_;
+
+  for (const auto& j : *routing_result.journeys_) {
+    j.print(ss, tt);
+    ss << "\n\n";
+  }
+  fmt::print("{}", ss.view());
 }

@@ -74,7 +74,7 @@ struct search {
     }
 #endif
 
-    if constexpr (Algo::kUseTransfersLowerBounds) {
+    if constexpr (Algo::kUseTransfersLowerBounds || Algo::kUseReachValues) {
       UTL_START_TIMING(lb);
       dijkstra(tt_, q_, tt_.transfers_lb_graph_, state_.lb_);
       UTL_STOP_TIMING(lb);
@@ -127,14 +127,16 @@ struct search {
         state_.lb_,
         day_idx_t{std::chrono::duration_cast<date::days>(
                       search_interval_.from_ - tt_.internal_interval().from_)
-                      .count()}};
+                      .count()},
+        use_reach_};
   }
 
   search(timetable const& tt,
          rt_timetable const* rtt,
          search_state& s,
          algo_state_t& algo_state,
-         query q)
+         query q,
+         bool use_reach)
       : tt_{tt},
         rtt_{rtt},
         state_{s},
@@ -149,6 +151,7 @@ struct search {
                 }},
             q_.start_time_)},
         fastest_direct_{get_fastest_direct(tt_, q_, SearchDir)},
+        use_reach_{use_reach},
         algo_{init(algo_state)} {}
 
   routing_result<algo_stats_t> execute() {
@@ -325,6 +328,14 @@ private:
   }
 
   void search_interval() {
+    vector<timetable::reach_store>::const_iterator rs = tt_.reach_stores_.end();
+    interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
+    for (auto iter = tt_.reach_stores_.begin(); iter != tt_.reach_stores_.end(); ++iter) {
+      if (iter->valid_for(search_interval)) {
+        rs = iter;
+      }
+    }
+
     utl::equal_ranges_linear(
         state_.starts_,
         [](start const& a, start const& b) {
@@ -343,7 +354,7 @@ private:
               start_time +
               (kFwd ? 1 : -1) * std::min(fastest_direct_, kMaxTravelTime);
           algo_.execute(start_time, q_.max_transfers_, worst_time_at_dest,
-                        state_.results_);
+                        state_.results_, rs);
 
           for (auto& j : state_.results_) {
             if (j.legs_.empty() &&
@@ -362,6 +373,7 @@ private:
   interval<unixtime_t> search_interval_;
   search_stats stats_;
   duration_t fastest_direct_;
+  bool use_reach_;
   Algo algo_;
 };
 
