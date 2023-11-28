@@ -74,8 +74,6 @@ else()
   endif()
 endif()
 
-set(USE_OPENMP ON CACHE BOOL openmp FORCE)
-
 # --- LIB ---
 file(GLOB_RECURSE nigiri-files src/*.cc)
 add_library(nigiri ${nigiri-files})
