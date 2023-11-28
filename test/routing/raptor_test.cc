@@ -62,11 +62,11 @@ TEST(routing, raptor_forward) {
   auto const results = raptor_search(
       tt, nullptr, "0000001", "0000003",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
-               unixtime_t{sys_days{2020_y / March / 30}} + 6_hours});
+               unixtime_t{sys_days{2020_y / March / 30}} + 6_hours}).journeys_;
 
   std::stringstream ss;
   ss << "\n";
-  for (auto const& x : results) {
+  for (auto const& x : *results) {
     x.print(ss, tt);
     ss << "\n\n";
   }
@@ -96,10 +96,10 @@ interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
   std::vector<nigiri::routing::journey> results_as_vec{begin(results), end(results)};
   std::sort(results_as_vec.begin(), results_as_vec.end(), journey_cmp);
 
-  auto const results_raptor = raptor_search(
+  auto const results_raptor = *raptor_search(
       tt, nullptr, "0000001", "0000003",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
-               unixtime_t{sys_days{2020_y / March / 30}} + 6_hours});
+               unixtime_t{sys_days{2020_y / March / 30}} + 6_hours}).journeys_;
 
   std::stringstream ss;
   ss << "\n";
@@ -154,11 +154,11 @@ TEST(routing, raptor_backward) {
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
   finalize(tt);
 
-  auto const results = raptor_search(
+  auto const results = *raptor_search(
       tt, nullptr, "0000003", "0000001",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
-      direction::kBackward);
+      direction::kBackward).journeys_;
 
   ASSERT_EQ(2U, results.size());
 

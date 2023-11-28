@@ -60,7 +60,7 @@ TEST(routing, raptor_intermodal_forward) {
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
   finalize(tt);
 
-  auto const results = raptor_intermodal_search(
+  auto const results = *raptor_intermodal_search(
       tt, nullptr,
       {{tt.locations_.location_id_to_idx_.at({.id_ = "0000001", .src_ = src}),
         10_minutes, 99U}},
@@ -68,7 +68,7 @@ TEST(routing, raptor_intermodal_forward) {
         15_minutes, 77U}},
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
-      nigiri::direction::kForward);
+      nigiri::direction::kForward).journeys_;
 
   std::stringstream ss;
   ss << "\n";
@@ -199,7 +199,7 @@ TEST(routing, raptor_intermodal_backward) {
   load_timetable(src, loader::hrd::hrd_5_20_26, files_abc(), tt);
   finalize(tt);
 
-  auto const results = raptor_intermodal_search(
+  auto const results = *raptor_intermodal_search(
       tt, nullptr,
       {nigiri::routing::offset{
           tt.locations_.location_id_to_idx_.at({.id_ = "0000003", .src_ = src}),
@@ -208,7 +208,7 @@ TEST(routing, raptor_intermodal_backward) {
         10_minutes, 77U}},
       interval<unixtime_t>{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                            unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
-      nigiri::direction::kBackward, 3U, true, true);
+      nigiri::direction::kBackward, 3U, true, true).journeys_;
 
   std::stringstream ss;
   ss << "\n";

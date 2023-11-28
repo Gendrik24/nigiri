@@ -17,6 +17,7 @@
 #include "nigiri/timetable.h"
 
 #include "cista/targets/file.h"
+#include <omp.h>
 
 using namespace date;
 using namespace nigiri;
@@ -56,21 +57,14 @@ int main(int ac, char** av) {
         (*c)->name());
 
     tt.date_range_ = {date::sys_days{January / 11 / 2021},
-                      date::sys_days{January / 18 / 2021}};
+                      date::sys_days{January / 17 / 2021}};
     register_special_stations(tt);
     (*c)->load({}, src, *d, tt);
     finalize(tt);
   }
 
-  const auto routing_result = raptor_search(tt, nullptr, location{tt, location_idx_t{59U}}.id_, location{tt, location_idx_t{3400U}}.id_,
-                                            "2021-1-14 13:30 UTC", "2021-1-14 16:30 UTC", direction::kForward, true);
+  const auto routing_result = raptor_search(tt, nullptr, location{tt, location_idx_t{4000U}}.id_, location{tt, location_idx_t{2500}}.id_,
+                                            "2021-1-14 13:00 UTC", "2021-1-14 17:00 UTC", direction::kForward, false);
 
-  std::stringstream ss;
-  ss << routing_result.algo_stats_;
-
-  for (const auto& j : *routing_result.journeys_) {
-    j.print(ss, tt);
-    ss << "\n\n";
-  }
-  fmt::print("{}", ss.view());
+  fmt::print("{}\n", routing_result.journeys_->size());
 }

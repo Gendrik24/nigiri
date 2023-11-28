@@ -10,6 +10,10 @@
 #include "nigiri/logging.h"
 #include "nigiri/routing/raptor/raptor_search.h"
 
+#include <sstream>
+
+#include <omp.h>
+
 namespace nigiri {
 
 constexpr auto const kMode =
@@ -18,6 +22,14 @@ constexpr auto const kMode =
 std::string reverse(std::string s) {
   std::reverse(s.begin(), s.end());
   return s;
+}
+
+std::string format(double d, unsigned short precision) {
+  std::stringstream ss;
+  ss.setf(std::ios::fixed);
+  ss.precision(precision);
+  ss << d;
+  return ss.str();
 }
 
 inline bool contains(interval<unixtime_t> i1, interval<unixtime_t> i2) {
@@ -125,9 +137,36 @@ void timetable::add_reach_store_for(const interval<nigiri::unixtime_t> time_rang
   if (! contains(internal_interval(), time_range)) {
     return;
   }
+
   reach_store rs;
   rs.valid_range_ = time_range;
   init_reach_store(rs);
+
+  #if defined(_OPENMP)
+  std::size_t loc_start;
+  std::size_t n_locations_finished = 9U;
+
+  #pragma omp parallel for default(none) private(loc_start) shared(rs, n_locations_finished)
+  for (loc_start = 9U; loc_start < n_locations(); ++loc_start) {
+
+    const auto& results = nigiri::routing::mc_raptor_search(*this,
+                                                            location{*this, location_idx_t{loc_start}}.id_,
+                                                            rs.valid_range_);
+
+    #pragma omp critical
+    {
+      for (std::size_t loc_tgt = 0U; loc_tgt < n_locations(); ++loc_tgt) {
+        compute_reach_and_update(rs, results[loc_tgt]);
+      }
+      n_locations_finished++;
+      nigiri::log(nigiri::log_lvl::info,
+            "reach_store",
+            "Progress {} %",
+                  format((double) n_locations_finished / (double) n_locations() * 100, 2U));
+    }
+  }
+
+  #else
 
   for (std::size_t loc_start = 9U; loc_start < n_locations(); ++loc_start) {
     nigiri::log(nigiri::log_lvl::info,
@@ -143,6 +182,8 @@ void timetable::add_reach_store_for(const interval<nigiri::unixtime_t> time_rang
       compute_reach_and_update(rs, results[loc_tgt]);
     }
   }
+  #endif
+
   reach_stores_.push_back(rs);
 }
 
