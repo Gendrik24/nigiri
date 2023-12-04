@@ -472,11 +472,11 @@ struct timetable {
   void compute_reach_and_update(reach_store& rs, nigiri::routing::journey const& journey);
 
   reach_t get_location_reach(reach_store const& rs, location_idx_t loc) const;
-  reach_t get_route_location_reach(reach_store const& rs, location_idx_t loc, route_idx_t r) const;
+  reach_t get_route_location_reach(reach_store const& rs, stop_idx_t s, route_idx_t r) const;
   reach_t get_trip_location_reach(reach_store const& rs, stop_idx_t s, transport_idx_t t) const;
 
   void attempt_update_location_reach(reach_store& rs, location_idx_t loc, reach_t reach) const;
-  void attempt_update_route_location_reach(reach_store& rs, location_idx_t loc, route_idx_t r, reach_t reach) const;
+  void attempt_update_route_location_reach(reach_store& rs, stop_idx_t s, route_idx_t r, reach_t reach) const;
   void attempt_update_trip_location_reach(reach_store& rs, stop_idx_t s, transport_idx_t t, reach_t reach);
 
   vector<reach_store> reach_stores_;

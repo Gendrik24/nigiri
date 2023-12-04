@@ -218,9 +218,9 @@ reach_t timetable::get_location_reach(reach_store const& rs, location_idx_t loc)
 }
 
 reach_t timetable::get_route_location_reach(reach_store const& rs,
-                                            location_idx_t loc,
+                                            stop_idx_t s,
                                             route_idx_t r) const {
-    return rs.route_location_reach_[r][to_idx(loc)];
+    return rs.route_location_reach_[r][s];
 }
 
 
@@ -244,10 +244,10 @@ void timetable::attempt_update_location_reach(reach_store& rs,
 
 
 void timetable::attempt_update_route_location_reach(reach_store& rs,
-                                                    location_idx_t loc,
+                                                    stop_idx_t s,
                                                     route_idx_t r,
                                                     reach_t reach) const {
-    rs.route_location_reach_[r][to_idx(loc)] = std::max(reach, get_route_location_reach(rs, loc, r));
+    rs.route_location_reach_[r][s] = std::max(reach, get_route_location_reach(rs, s, r));
 }
 
 void timetable::attempt_update_trip_location_reach(reach_store& rs,
@@ -264,28 +264,27 @@ void timetable::attempt_update_trip_location_reach(reach_store& rs,
 void timetable::compute_reach_and_update(reach_store& rs,
                                          const nigiri::routing::journey& j) {
     const std::uint8_t n_transports = j.transfers_ + 1U;
-    auto n_transports_left = n_transports;
+    auto n_transports_right = n_transports;
+    auto n_transports_left = uint8_t{0U};
     for (auto const& leg : j.legs_) {
-      std::uint8_t n_transports_right = n_transports - n_transports_left;
       reach_t reach = 0U;
 
       reach = std::min(n_transports_left, n_transports_right);
-      attempt_update_location_reach(rs, leg.to_, reach);
+      attempt_update_location_reach(rs, leg.from_, reach);
 
       if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
       const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
       const auto t_idx = run.r_.t_.t_idx_;
 
-      attempt_update_route_location_reach(rs, leg.to_, transport_route_[t_idx], reach);
-      attempt_update_trip_location_reach(rs, run.stop_range_.to_ - 1U, t_idx, reach);
-
-      n_transports_left--;
-      n_transports_right++;
-
+      n_transports_left++;
+      n_transports_right--;
       reach = std::min(n_transports_left, n_transports_right);
 
-      attempt_update_location_reach(rs, leg.from_, reach);
+      attempt_update_route_location_reach(rs, run.stop_range_.to_ - 1U, transport_route_[t_idx], reach);
+      attempt_update_trip_location_reach(rs, run.stop_range_.to_ - 1U, t_idx, reach);
       }
+
+      attempt_update_location_reach(rs, leg.to_, reach);
     }
 }
 
