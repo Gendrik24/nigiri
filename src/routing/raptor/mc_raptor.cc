@@ -292,7 +292,7 @@ void mc_raptor::reconstruct() {
 
     const auto fastest_direct = get_fastest_direct(location_idx_t{loc});
 
-    for (auto k = 0U; k != end_k() - 1; ++k) {
+    for (auto k = 0U; k != end_k(); ++k) {
       auto const& round_bag = state_.round_bags_[k][loc];
       if (round_bag.size() == 0) {
         continue;
