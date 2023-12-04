@@ -277,7 +277,7 @@ void timetable::compute_reach_and_update(reach_store& rs,
       const auto t_idx = run.r_.t_.t_idx_;
 
       attempt_update_route_location_reach(rs, leg.to_, transport_route_[t_idx], reach);
-      attempt_update_trip_location_reach(rs, run.stop_range_.to_, t_idx, reach);
+      attempt_update_trip_location_reach(rs, run.stop_range_.to_ - 1U, t_idx, reach);
 
       n_transports_left--;
       n_transports_right++;
