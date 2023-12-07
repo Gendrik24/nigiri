@@ -1,6 +1,7 @@
 #pragma once
 
 #include <compare>
+#include <cstddef>
 #include <filesystem>
 #include <span>
 #include <type_traits>
@@ -480,6 +481,11 @@ struct timetable {
   void attempt_update_trip_location_reach(reach_store& rs, stop_idx_t s, transport_idx_t t, reach_t reach);
 
   vector<reach_store> reach_stores_;
+  
+  vector<route_idx_t> routes_conflict_ordered_;
+  vector<std::size_t> conflict_groups_last_index_;
+
+
 };
 
 }  // namespace nigiri

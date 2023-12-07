@@ -6,6 +6,7 @@
 #include "nigiri/loader/build_lb_graph.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/timetable.h"
+#include "nigiri/loader/build_conflict_graph.h"
 
 namespace nigiri::loader {
 
@@ -55,6 +56,7 @@ void finalize(timetable& tt,
   build_lb_graph<direction::kBackward>(tt);
   build_transfers_lb_graph<direction::kForward>(tt);
   build_transfers_lb_graph<direction::kBackward>(tt);
+  build_conflict_graph(tt);
 }
 
 }  // namespace nigiri::loader
