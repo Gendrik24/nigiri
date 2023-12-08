@@ -1,0 +1,8 @@
+agency_id,route_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color,route_sort_order,min_headway_minutes,eligibility_restricted,continuous_pickup,continuous_drop_off,tts_route_short_name,tts_route_long_name
+785,9707,,Oskaloosa Rides,,3,https://www.1015transit.com/bus-routes,,,0,60,0,1,1,,
+785,7468,1,North,,3,https://www.1015transit.com/bus-routes,543b8f,ffffff,1,,0,1,1,,
+785,7469,2,East/West,,3,https://www.1015transit.com/bus-routes,14984b,ffffff,2,,0,1,1,,
+785,7925,3,South Residential,,3,https://www.1015transit.com/bus-routes,a21535,ffffff,3,,0,1,1,,
+785,7926,4,South Commercial,,3,https://www.1015transit.com/bus-routes,0065a6,ffffff,4,,0,1,1,,
+785,8109,7,Airport,,3,https://www.1015transit.com/bus-routes,f7c71a,253f60,5,,0,1,1,,
+785,8110,8,Shopping Shuttles,,3,https://www.1015transit.com/bus-routes,253f60,ffffff,6,,0,1,1,,

@@ -1,0 +1,6 @@
+service_id,service_name,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+c_6023_b_6369_d_21,Oskaloosa Year Round (MWF),1,0,1,0,1,0,0,20171201,20231101
+c_4773_b_4987_d_8,Ottumwa Year Round (Thurday only),0,0,0,1,0,0,0,20171115,20231101
+c_4773_b_4987_d_4,Ottumwa Year Round (Wednesday only),0,0,1,0,0,0,0,20171115,20231101
+c_4773_b_4987_d_31,Ottumwa Year Round (Weekday),1,1,1,1,1,0,0,20171115,20231101
+c_4773_b_4987_d_1,Ottumwa Year Round (Monday only),1,0,0,0,0,0,0,20171115,20231101

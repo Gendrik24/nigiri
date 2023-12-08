@@ -1,0 +1,6 @@
+service_id,service_description
+c_6023_b_6369_d_21,Oskaloosa Year Round (MWF)
+c_4773_b_4987_d_8,Ottumwa Year Round (Thurday only)
+c_4773_b_4987_d_4,Ottumwa Year Round (Wednesday only)
+c_4773_b_4987_d_31,Ottumwa Year Round (Weekday)
+c_4773_b_4987_d_1,Ottumwa Year Round (Monday only)
