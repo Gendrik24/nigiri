@@ -165,14 +165,11 @@ void add_reach_store_for(interval<nigiri::unixtime_t> const& time_range, timetab
     const auto& results = nigiri::routing::mc_raptor_search(tt,
                                                             location{tt, location_idx_t{loc_start}}.id_,
                                                             rs.valid_range_);
-
-
-    for (std::size_t loc_tgt = 0U; loc_tgt < tt.n_locations(); ++loc_tgt) {
-      compute_reach(rs, tt,  results[loc_tgt]);
-    }
-
 #pragma omp critical
     {
+      for (std::size_t loc_tgt = 0U; loc_tgt < tt.n_locations(); ++loc_tgt) {
+        compute_reach(rs, tt,  results[loc_tgt]);
+      }
       n_locations_finished++;
       nigiri::log(nigiri::log_lvl::info,
                   "reach_store",
