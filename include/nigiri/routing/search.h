@@ -16,6 +16,7 @@
 #include "nigiri/routing/start_times.h"
 #include "nigiri/timetable.h"
 #include "nigiri/types.h"
+#include "nigiri/reach_store.h"
 
 namespace nigiri::routing {
 
@@ -327,11 +328,15 @@ private:
     });
   }
 
+  static bool rs_valid_for(reach_store const& rs, interval<unixtime_t> search_interval) {
+    return rs.valid_range_.from_ <= search_interval.from_ && search_interval.to_ <= rs.valid_range_.to_;
+  }
+
   void search_interval() {
-    vector<timetable::reach_store>::const_iterator rs = tt_.reach_stores_.end();
+    vector<reach_store>::const_iterator rs = tt_.reach_stores_.end();
     interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
     for (auto iter = tt_.reach_stores_.begin(); iter != tt_.reach_stores_.end(); ++iter) {
-      if (iter->valid_for(search_interval)) {
+      if (rs_valid_for(*iter, search_interval)) {
         rs = iter;
       }
     }

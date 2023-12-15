@@ -12,6 +12,7 @@
 #include "nigiri/rt/rt_timetable.h"
 #include "nigiri/special_stations.h"
 #include "nigiri/timetable.h"
+#include "nigiri/reach_store.h"
 
 namespace nigiri::routing {
 
@@ -63,6 +64,25 @@ struct raptor {
     return x;
   }
   static auto dir(auto a) { return (kFwd ? 1 : -1) * a; }
+
+  static bool not_optimal_by_transport_reach(reach_t const& reach, std::uint8_t trips_from_start, std::uint8_t trips_to_end) {
+    return reach.transport_reach_ < trips_from_start && reach.transport_reach_ < trips_to_end;
+  }
+
+  static bool not_optimal_by_travel_time_reach(reach_t const& reach, std::uint16_t time_from_start, std::uint16_t time_to_end) {
+    return reach.travel_time_reach_ < time_from_start && reach.travel_time_reach_ < time_to_end;
+  }
+
+  reach_t const& get_transport_reach(reach_store const& rs,
+                                     stop_idx_t s,
+                                     transport_idx_t t) {
+    const auto r = tt_.transport_route_[t];
+    const auto& range = rs.route_reach_value_ranges_[r];
+    const auto& trip_range = tt_.route_transport_ranges_[r];
+    const auto t_offset = t - tt_.route_transport_ranges_[r].from_;
+
+    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size()) + to_idx(t_offset)];
+  }
 
   raptor(timetable const& tt,
          rt_timetable const* rtt,
@@ -118,7 +138,7 @@ struct raptor {
                std::uint8_t const max_transfers,
                unixtime_t const worst_time_at_dest,
                pareto_set<journey>& results,
-               vector<timetable::reach_store>::const_iterator rs) {
+               vector<reach_store>::const_iterator rs) {
     auto const end_k = std::min(max_transfers, kMaxTransfers) + 1U;
 
     auto const d_worst_at_dest = unix_to_delta(base(), worst_time_at_dest);
@@ -166,7 +186,7 @@ struct raptor {
         if (state_.route_mark_[r_id]) {
           ++stats_.n_routes_visited_;
           trace("┊ ├k={} updating route {}\n", k, r_id);
-          any_marked |= update_route(k, route_idx_t{r_id}, rs);
+          any_marked |= update_route(k, route_idx_t{r_id}, rs, start_time);
         }
       }
       if constexpr (Rt) {
@@ -189,8 +209,8 @@ struct raptor {
       std::swap(state_.prev_station_mark_, state_.station_mark_);
       utl::fill(state_.station_mark_, false);
 
-      update_transfers(k, rs);
-      update_footpaths(k, rs);
+      update_transfers(k, rs, start_time);
+      update_footpaths(k, rs, start_time);
       update_intermodal_footpaths(k);
 
       trace_print_state_after_round();
@@ -233,7 +253,7 @@ private:
     return tt_.internal_interval_days().from_ + as_int(base_) * date::days{1};
   }
 
-  void update_transfers(unsigned const k, vector<timetable::reach_store>::const_iterator rs) {
+  void update_transfers(unsigned const k, vector<reach_store>::const_iterator rs, unixtime_t start_time) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -253,10 +273,15 @@ private:
           continue;
         }
 
-        if (use_reach_if_available_ && rs != tt_.reach_stores_.end() &&
-            rs->location_reach_[i] < k && rs->location_reach_[i] < lb_[i].transports_) {
-          ++stats_.fp_update_prevented_by_reach_;
-          continue;
+        if (use_reach_if_available_ && rs != tt_.reach_stores_.end()) {
+          reach_t const& reach = rs->location_reach_[i];
+          std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
+
+          if (not_optimal_by_transport_reach(reach, k, lb_[i].transports_) ||
+              not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
+            ++stats_.fp_update_prevented_by_reach_;
+            continue;
+          }
         }
 
         ++stats_.n_earliest_arrival_updated_by_footpath_;
@@ -270,7 +295,7 @@ private:
     }
   }
 
-  void update_footpaths(unsigned const k, vector<timetable::reach_store>::const_iterator rs) {
+  void update_footpaths(unsigned const k, vector<reach_store>::const_iterator rs, unixtime_t start_time) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -303,10 +328,15 @@ private:
             continue;
           }
 
-          if (use_reach_if_available_ && rs != tt_.reach_stores_.end() &&
-              rs->location_reach_[target] < k && rs->location_reach_[target] < lb_[target].transports_) {
-            ++stats_.fp_update_prevented_by_reach_;
-            continue;
+          if (use_reach_if_available_ && rs != tt_.reach_stores_.end()) {
+            reach_t const& reach = rs->location_reach_[target];
+            std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
+
+            if (not_optimal_by_transport_reach(reach, k, lb_[target].transports_) ||
+                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[target].travel_time_)) {
+              ++stats_.fp_update_prevented_by_reach_;
+              continue;
+            }
           }
 
           trace_upd(
@@ -417,7 +447,7 @@ private:
     return any_marked;
   }
 
-  bool update_route(unsigned const k, route_idx_t const r, vector<timetable::reach_store>::const_iterator rs) {
+  bool update_route(unsigned const k, route_idx_t const r, vector<reach_store>::const_iterator rs, unixtime_t start_time) {
     auto const stop_seq = tt_.route_location_seq_[r];
     bool any_marked = false;
 
@@ -463,8 +493,11 @@ private:
               location{tt_, stp.location_idx()});
 
           if (use_reach_if_available_ && rs != tt_.reach_stores_.end()) {
-            const auto reach = tt_.get_trip_location_reach(*rs, stop_idx, et.t_idx_);
-            if (reach < k && reach < lb_[l_idx].transports_) {
+            reach_t const& reach = get_transport_reach(*rs, stop_idx, et.t_idx_);
+            std::uint16_t min_from_start = by_transport - unix_to_delta(base(), start_time);
+
+            if (not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_) ||
+                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
             }
