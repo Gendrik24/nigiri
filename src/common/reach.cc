@@ -98,6 +98,10 @@ void compute_reach(reach_store& rs,
           n_transports_seen,
           static_cast<uint8_t>(n_transports_total - n_transports_seen));
 
+      travel_time_reach = std::min(
+          travel_time_seen,
+          static_cast<uint16_t>(travel_time_total - travel_time_seen));
+
       update_route_reach(rs,
                          run.stop_range_.to_ - 1U,
                          tt.transport_route_[t_idx],
