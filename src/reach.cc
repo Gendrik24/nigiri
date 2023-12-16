@@ -69,26 +69,19 @@ void compute_reach(reach_store& rs,
   using namespace std;
 
   const uint8_t n_transports_total = j.transfers_ + 1U;
-  const uint16_t travel_time_total = (j.dest_time_ - j.start_time_).count();
-
   uint8_t n_transports_seen{0U};
-  uint16_t travel_time_seen{0U};
-
   for (auto const& leg : j.legs_) {
+
+
+    uint16_t travel_time_reach = std::min(
+        (leg.arr_time_- j.start_time_).count(),
+        (j.dest_time_ - leg.arr_time_).count());
 
     uint8_t transport_reach = std::min(
         n_transports_seen,
         static_cast<uint8_t>(n_transports_total - n_transports_seen));
 
-    uint16_t travel_time_reach = std::min(
-        travel_time_seen,
-        static_cast<uint16_t>(travel_time_total - travel_time_seen));
 
-    update_location_reach(rs,
-                          leg.from_,
-                          {transport_reach, travel_time_seen});
-
-    travel_time_seen += (leg.arr_time_ - leg.dep_time_).count();
     if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
       const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
       const auto t_idx = run.r_.t_.t_idx_;
@@ -98,9 +91,6 @@ void compute_reach(reach_store& rs,
           n_transports_seen,
           static_cast<uint8_t>(n_transports_total - n_transports_seen));
 
-      travel_time_reach = std::min(
-          travel_time_seen,
-          static_cast<uint16_t>(travel_time_total - travel_time_seen));
 
       update_route_reach(rs,
                          run.stop_range_.to_ - 1U,
@@ -115,8 +105,8 @@ void compute_reach(reach_store& rs,
     }
 
     update_location_reach(rs,
-                          leg.from_,
-                          {transport_reach, travel_time_seen});
+                          leg.to_,
+                          {transport_reach, travel_time_reach});
   }
 }
 
