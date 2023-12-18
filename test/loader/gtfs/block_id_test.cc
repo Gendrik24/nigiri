@@ -125,7 +125,7 @@ TEST(gtfs, block_id) {
 
   {
     auto const res = *raptor_search(tt, nullptr, "S1", "S8",
-                                   "2006-07-02 23:00 Europe/Berlin").journeys_;
+                                   "2006-07-02 23:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
 
@@ -136,41 +136,41 @@ TEST(gtfs, block_id) {
 
   {
     auto const res = *raptor_search(tt, nullptr, "S2", "S1",
-                                   "2006-07-02 23:00 Europe/Berlin").journeys_;
+                                   "2006-07-02 23:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(0, res.size());
   }
 
   {
     auto const res = *raptor_search(tt, nullptr, "S2", "S3",
-                                   "2006-07-09 00:00 Europe/Berlin").journeys_;
+                                   "2006-07-09 00:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
   }
 
   {
     auto const res = *raptor_search(tt, nullptr, "S2", "S7",
-                                   "2006-07-09 00:00 Europe/Berlin").journeys_;
+                                   "2006-07-09 00:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
   }
 
   {
     auto const res = *raptor_search(tt, nullptr, "S1", "S4",
-                                   "2006-07-05 23:00 Europe/Berlin").journeys_;
+                                   "2006-07-05 23:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
   }
 
   {
     auto const res = *raptor_search(tt, nullptr, "S1", "S5",
-                                   "2006-07-06 23:00 Europe/Berlin").journeys_;
+                                   "2006-07-06 23:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
   }
 
   {
     auto const res = *raptor_search(tt, nullptr, "S1", "S7",
-                                   "2006-07-07 23:00 Europe/Berlin").journeys_;
+                                   "2006-07-07 23:00 Europe/Berlin", reach_mode::kNoReach).journeys_;
     ASSERT_EQ(1, res.size());
     expect_no_transfers(*res.begin());
   }

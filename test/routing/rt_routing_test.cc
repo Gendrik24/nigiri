@@ -142,7 +142,7 @@ TEST(routing, rt_raptor_forward) {
   EXPECT_EQ(stats.total_entities_success_, 1U);
 
   auto const results =
-      raptor_search(tt, &rtt, "A", "D", sys_days{May / 2 / 2019} + 23h).journeys_;
+      raptor_search(tt, &rtt, "A", "D", sys_days{May / 2 / 2019} + 23h, reach_mode::kNoReach).journeys_;
   std::stringstream ss;
   for (auto const& x : *results) {
     x.print(ss, tt, &rtt);
@@ -213,7 +213,7 @@ TEST(routing, rt_raptor_backward) {
   EXPECT_EQ(stats.total_entities_success_, 1U);
 
   auto const results =
-      raptor_search(tt, &rtt, "D", "A", sys_days{May / 3 / 2019} + 2h,
+      raptor_search(tt, &rtt, "D", "A", sys_days{May / 3 / 2019} + 2h, reach_mode::kNoReach,
                     nigiri::direction::kBackward).journeys_;
   std::stringstream ss;
   for (auto const& x : *results) {

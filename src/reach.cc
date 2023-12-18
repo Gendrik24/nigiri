@@ -173,11 +173,11 @@ void add_reach_store_for(interval<nigiri::unixtime_t> const& time_range, timetab
   }
 
 #else
-  for (std::size_t loc_start = 9U; loc_start < n_locations(); ++loc_start) {
+  for (std::size_t loc_start = 9U; loc_start < tt.n_locations(); ++loc_start) {
     nigiri::log(nigiri::log_lvl::info,
                 "reach_store",
                 "Starting to calculate reach values for journeys starting from location {}/{}",
-                loc_start, n_locations());
+                loc_start, tt.n_locations());
     const auto& results = nigiri::routing::mc_raptor_search(tt,
                                                             location{tt, location_idx_t{loc_start}}.id_,
                                                             rs.valid_range_);

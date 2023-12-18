@@ -451,7 +451,7 @@ struct timetable {
 
   vecvec<component_idx_t, component_idx_t> transfers_lb_graph_;
 
-  vector<reach_store> reach_stores_;
+  vector_map<reach_store_idx_t, reach_store> reach_stores_;
   
   vector<route_idx_t> routes_conflict_ordered_;
   vector<std::size_t> conflict_groups_last_index_;

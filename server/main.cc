@@ -64,7 +64,7 @@ int main(int ac, char** av) {
   }
 
   const auto routing_result = raptor_search(tt, nullptr, location{tt, location_idx_t{4000U}}.id_, location{tt, location_idx_t{2500}}.id_,
-                                            "2021-1-14 13:00 UTC", "2021-1-14 17:00 UTC", direction::kForward, false);
+                                            "2021-1-14 13:00 UTC", "2021-1-14 17:00 UTC", reach_mode::kNoReach, direction::kForward);
 
   fmt::print("{}\n", routing_result.journeys_->size());
 }

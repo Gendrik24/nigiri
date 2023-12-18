@@ -93,7 +93,7 @@ struct search {
 #endif
     }
 
-    if constexpr (Algo::kUseLowerBounds) {
+    if constexpr (Algo::kUseLowerBounds || Algo::kUseReachValues) {
       UTL_START_TIMING(lb);
       dijkstra(tt_, q_,
                kFwd ? tt_.fwd_search_lb_graph_ : tt_.bwd_search_lb_graph_,
@@ -128,8 +128,7 @@ struct search {
         state_.lb_,
         day_idx_t{std::chrono::duration_cast<date::days>(
                       search_interval_.from_ - tt_.internal_interval().from_)
-                      .count()},
-        use_reach_};
+                      .count()}};
   }
 
   search(timetable const& tt,
@@ -137,7 +136,7 @@ struct search {
          search_state& s,
          algo_state_t& algo_state,
          query q,
-         bool use_reach)
+         reach_mode rm)
       : tt_{tt},
         rtt_{rtt},
         state_{s},
@@ -152,7 +151,7 @@ struct search {
                 }},
             q_.start_time_)},
         fastest_direct_{get_fastest_direct(tt_, q_, SearchDir)},
-        use_reach_{use_reach},
+        reach_mode_{rm},
         algo_{init(algo_state)} {}
 
   routing_result<algo_stats_t> execute() {
@@ -333,11 +332,13 @@ private:
   }
 
   void search_interval() {
-    vector<reach_store>::const_iterator rs = tt_.reach_stores_.end();
-    interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
-    for (auto iter = tt_.reach_stores_.begin(); iter != tt_.reach_stores_.end(); ++iter) {
-      if (rs_valid_for(*iter, search_interval)) {
-        rs = iter;
+    reach_store_idx_t rs_idx = reach_store_idx_t::invalid();
+    if (reach_mode_ != reach_mode::kNoReach) {
+      interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
+      for (auto i = 0; i < tt_.reach_stores_.size(); ++i) {
+        if (rs_valid_for(tt_.reach_stores_[reach_store_idx_t{i}], search_interval)) {
+          rs_idx = reach_store_idx_t{i};
+        }
       }
     }
 
@@ -355,11 +356,24 @@ private:
             algo_.add_start(s.stop_, s.time_at_stop_);
           }
 
+          reach_config_t rc = {
+              .mode_ = reach_mode_,
+              .reach_store_idx_ = rs_idx
+          };
+
+          if (start_time >= search_interval_.to_) {
+            if (rc.mode_ == reach_mode::kTravelTimeReach) {
+              rc.mode_ = reach_mode::kNoReach;
+            } else if (rc.mode_ == reach_mode::kTransferTravelTimeRach) {
+              rc.mode_ = reach_mode::kTransferReach;
+            }
+          }
+
           auto const worst_time_at_dest =
               start_time +
               (kFwd ? 1 : -1) * std::min(fastest_direct_, kMaxTravelTime);
           algo_.execute(start_time, q_.max_transfers_, worst_time_at_dest,
-                        state_.results_, start_time >= search_interval_.to_ ? tt_.reach_stores_.end() : rs);
+                        state_.results_, rc);
 
           for (auto& j : state_.results_) {
             if (j.legs_.empty() &&
@@ -378,7 +392,7 @@ private:
   interval<unixtime_t> search_interval_;
   search_stats stats_;
   duration_t fastest_direct_;
-  bool use_reach_;
+  reach_mode reach_mode_;
   Algo algo_;
 };
 

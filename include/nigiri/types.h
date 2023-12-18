@@ -100,6 +100,13 @@ using optional = cista::optional<T>;
 template <typename Key, typename T, std::size_t N>
 using nvec = cista::raw::nvec<Key, T, N>;
 
+enum class reach_mode : std::uint8_t {
+  kNoReach = 0,
+  kTransferReach = 1,
+  kTravelTimeReach = 2,
+  kTransferTravelTimeRach = 3
+};
+
 using bitfield_idx_t = cista::strong<std::uint32_t, struct _bitfield_idx>;
 using location_idx_t = cista::strong<std::uint32_t, struct _location_idx>;
 using component_idx_t = cista::strong<std::uint32_t, struct _component_idx>;
@@ -111,6 +118,7 @@ using trip_idx_t = cista::strong<std::uint32_t, struct _trip_idx>;
 using trip_id_idx_t = cista::strong<std::uint32_t, struct _trip_id_str_idx>;
 using transport_idx_t = cista::strong<std::uint32_t, struct _transport_idx>;
 using source_idx_t = cista::strong<std::uint8_t, struct _source_idx>;
+using reach_store_idx_t =cista::strong<std::uint16_t, struct _reach_store_idx_>;
 using day_idx_t = cista::strong<std::uint16_t, struct _day_idx>;
 using timezone_idx_t = cista::strong<std::uint8_t, struct _timezone_idx>;
 using merged_trips_idx_t =
@@ -193,6 +201,11 @@ struct transport {
   constexpr bool is_valid() const { return day_ != day_idx_t::invalid(); }
   transport_idx_t t_idx_{transport_idx_t::invalid()};
   day_idx_t day_{day_idx_t::invalid()};
+};
+
+struct reach_config_t {
+  reach_mode mode_;
+  reach_store_idx_t reach_store_idx_;
 };
 
 using i32_minutes = std::chrono::duration<std::int32_t, std::ratio<60>>;

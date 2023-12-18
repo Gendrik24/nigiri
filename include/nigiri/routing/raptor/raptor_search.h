@@ -18,8 +18,8 @@ routing_result<raptor_stats> raptor_search(timetable const&,
                                            std::string_view from,
                                            std::string_view to,
                                            std::string_view time,
-                                           direction = direction::kForward,
-                                           bool use_reach = false);
+                                           reach_mode mode,
+                                           direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
@@ -27,8 +27,8 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            std::string_view to,
                                            std::string_view start_time,
                                            std::string_view end_time,
-                                           direction const search_dir,
-                                           bool use_reach = false);
+                                           reach_mode mode,
+                                           direction const search_dir);
 
 std::vector<pareto_set<journey>> mc_raptor_search(timetable const& tt,
                                              std::string_view from,
@@ -44,14 +44,14 @@ routing_result<raptor_stats> raptor_search(timetable const&,
                                            std::string_view from,
                                            std::string_view to,
                                            routing::start_time_t,
-                                           direction = direction::kForward,
-                                           bool use_reach = false);
+                                           reach_mode mode,
+                                           direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_search(timetable const&,
                                            rt_timetable const*,
                                            routing::query,
-                                           direction = direction::kForward,
-                                           bool use_reach = false);
+                                           reach_mode mode,
+                                           direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_intermodal_search(timetable const&,
                                                       rt_timetable const*,
