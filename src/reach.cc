@@ -66,36 +66,43 @@ void update_transport_reach(reach_store& rs,
 void compute_reach(reach_store& rs,
                    timetable const& tt,
                    const nigiri::routing::journey& j) {
-  using namespace std;
+
 
   const uint8_t n_transports_total = j.transfers_ + 1U;
   uint8_t n_transports_seen{0U};
   for (auto const& leg : j.legs_) {
 
-
     uint16_t travel_time_reach = std::min(
-        (leg.arr_time_- j.start_time_).count(),
-        (j.dest_time_ - leg.arr_time_).count());
+        (leg.dep_time_ - j.start_time_).count(),
+        (j.dest_time_  - leg.dep_time_).count());
 
     uint8_t transport_reach = std::min(
         n_transports_seen,
         static_cast<uint8_t>(n_transports_total - n_transports_seen));
 
+    if (holds_alternative<journey::run_enter_exit>(leg.uses_)) {
+      const auto& run = std::get<journey::run_enter_exit>(leg.uses_);
+      const auto route_idx = tt.transport_route_[run.r_.t_.t_idx_];
 
-    if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
-      const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
+      update_route_reach(rs,
+                         run.stop_range_.from_,
+                         route_idx,
+                         {transport_reach, travel_time_reach});
+    }
+
+    travel_time_reach = std::min(
+        (leg.arr_time_- j.start_time_).count(),
+        (j.dest_time_ - leg.arr_time_).count());
+
+
+    if (holds_alternative<journey::run_enter_exit>(leg.uses_)) {
+      const auto& run = std::get<journey::run_enter_exit>(leg.uses_);
       const auto t_idx = run.r_.t_.t_idx_;
 
       n_transports_seen++;
       transport_reach = std::min(
           n_transports_seen,
           static_cast<uint8_t>(n_transports_total - n_transports_seen));
-
-
-      update_route_reach(rs,
-                         run.stop_range_.to_ - 1U,
-                         tt.transport_route_[t_idx],
-                         {transport_reach, travel_time_reach});
 
       update_transport_reach(rs,
                              tt,
