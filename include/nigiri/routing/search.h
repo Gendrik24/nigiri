@@ -362,11 +362,7 @@ private:
           };
 
           if (start_time >= search_interval_.to_) {
-            if (rc.mode_ == reach_mode::kTravelTimeReach) {
-              rc.mode_ = reach_mode::kNoReach;
-            } else if (rc.mode_ == reach_mode::kTransferTravelTimeRach) {
-              rc.mode_ = reach_mode::kTransferReach;
-            }
+            rc.mode_ = reach_mode::kNoReach;
           }
 
           auto const worst_time_at_dest =

@@ -280,14 +280,14 @@ private:
                reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
               not_optimal_by_transport_reach(reach, k, lb_[i].transports_)) {
             ++stats_.fp_update_prevented_by_reach_;
-            continue;
+               continue;
           }
 
           if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
                reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
               not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
             ++stats_.fp_update_prevented_by_reach_;
-            continue;
+               continue;
           }
 
         }
@@ -339,19 +339,19 @@ private:
 
           if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {
             reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
-            reach_t const& reach = rs.location_reach_[i];
+            reach_t const& reach = rs.location_reach_[target];
             std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
 
             if ((reach_config.mode_ == reach_mode::kTransferReach ||
                  reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
-                not_optimal_by_transport_reach(reach, k, lb_[i].transports_)) {
+                not_optimal_by_transport_reach(reach, k, lb_[target].transports_)) {
               ++stats_.fp_update_prevented_by_reach_;
               continue;
             }
 
             if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
                  reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
-                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
+                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[target].travel_time_)) {
               ++stats_.fp_update_prevented_by_reach_;
               continue;
             }
@@ -518,14 +518,14 @@ private:
 
             if ((reach_config.mode_ == reach_mode::kTransferReach ||
                  reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
-                not_optimal_by_transport_reach(reach, k, lb_[i].transports_)) {
+                not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
             }
 
             if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
                  reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
-                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
+                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
             }
