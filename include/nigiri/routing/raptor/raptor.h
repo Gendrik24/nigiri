@@ -589,14 +589,14 @@ private:
           if ((reach_config.mode_ == reach_mode::kTransferReach ||
                reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
               not_optimal_by_transport_reach(reach, k-1, lb_[l_idx].transports_)) {
-                ++stats_.fp_update_prevented_by_reach_;
+                ++stats_.route_update_prevented_by_reach_;
                 continue;
           }
 
           if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
                reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
               not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
-                ++stats_.fp_update_prevented_by_reach_;
+                ++stats_.route_update_prevented_by_reach_;
                 continue;
           }
 
