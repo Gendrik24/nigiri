@@ -63,7 +63,7 @@ TEST(routing, raptor_forward) {
       tt, nullptr, "0000001", "0000003",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
- reach_mode::kNoReach).journeys_;
+ noReach()).journeys_;
 
   std::stringstream ss;
   ss << "\n";
@@ -101,7 +101,7 @@ interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
       tt, nullptr, "0000001", "0000003",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
- reach_mode::kNoReach).journeys_;
+ noReach()).journeys_;
 
   std::stringstream ss;
   ss << "\n";
@@ -160,7 +160,7 @@ TEST(routing, raptor_backward) {
       tt, nullptr, "0000003", "0000001",
       interval{unixtime_t{sys_days{2020_y / March / 30}} + 5_hours,
                unixtime_t{sys_days{2020_y / March / 30}} + 6_hours},
-      reach_mode::kNoReach,
+      noReach(),
       direction::kBackward).journeys_;
 
   ASSERT_EQ(2U, results.size());

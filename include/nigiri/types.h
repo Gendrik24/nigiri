@@ -100,12 +100,22 @@ using optional = cista::optional<T>;
 template <typename Key, typename T, std::size_t N>
 using nvec = cista::raw::nvec<Key, T, N>;
 
-enum class reach_mode : std::uint8_t {
-  kNoReach = 0,
+enum reach_mode_flags {
   kTransferReach = 1,
-  kTravelTimeReach = 2,
-  kTransferTravelTimeRach = 3
+  kTravelTimeReach = 2
 };
+
+inline reach_mode_flags operator|(reach_mode_flags a, reach_mode_flags b) {
+  return static_cast<reach_mode_flags>(a | b);
+}
+
+inline reach_mode_flags operator&(reach_mode_flags a, reach_mode_flags b) {
+  return static_cast<reach_mode_flags>(a & b);
+}
+
+constexpr reach_mode_flags noReach() {
+  return static_cast<reach_mode_flags>(0);
+}
 
 using bitfield_idx_t = cista::strong<std::uint32_t, struct _bitfield_idx>;
 using location_idx_t = cista::strong<std::uint32_t, struct _location_idx>;
@@ -204,7 +214,7 @@ struct transport {
 };
 
 struct reach_config_t {
-  reach_mode mode_;
+  reach_mode_flags mode_flags_;
   reach_store_idx_t reach_store_idx_;
 };
 

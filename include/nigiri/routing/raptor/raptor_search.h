@@ -18,7 +18,7 @@ routing_result<raptor_stats> raptor_search(timetable const&,
                                            std::string_view from,
                                            std::string_view to,
                                            std::string_view time,
-                                           reach_mode mode,
+                                           reach_mode_flags mode_flags,
                                            direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_search(timetable const& tt,
@@ -27,7 +27,7 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            std::string_view to,
                                            std::string_view start_time,
                                            std::string_view end_time,
-                                           reach_mode mode,
+                                           reach_mode_flags mode_flags,
                                            direction const search_dir);
 
 std::vector<pareto_set<journey>> mc_raptor_search(timetable const& tt,
@@ -44,13 +44,13 @@ routing_result<raptor_stats> raptor_search(timetable const&,
                                            std::string_view from,
                                            std::string_view to,
                                            routing::start_time_t,
-                                           reach_mode mode,
+                                           reach_mode_flags mode,
                                            direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_search(timetable const&,
                                            rt_timetable const*,
                                            routing::query,
-                                           reach_mode mode,
+                                           reach_mode_flags mode,
                                            direction = direction::kForward);
 
 routing_result<raptor_stats> raptor_intermodal_search(timetable const&,

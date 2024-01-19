@@ -1,6 +1,7 @@
 #include <vector>
 #include <sstream>
 #include <filesystem>
+#include <chrono>
 
 #include "date/date.h"
 
@@ -62,9 +63,15 @@ int main(int ac, char** av) {
     (*c)->load({}, src, *d, tt);
     finalize(tt);
   }
+  const auto r = raptor_search(tt,
+                              nullptr,
+                              location(tt, location_idx_t{23490U}).id_,
+                              location(tt, location_idx_t{44284U}).id_,
+                              "2024-1-23 08:00 UTC", 
+                              "2024-1-23 20:00 UTC", 
+                              noReach(), 
+                              direction::kForward).journeys_;
 
-  const auto routing_result = raptor_search(tt, nullptr, location{tt, location_idx_t{4000U}}.id_, location{tt, location_idx_t{2500}}.id_,
-                                            "2021-1-14 13:00 UTC", "2021-1-14 17:00 UTC", reach_mode::kNoReach, direction::kForward);
+  fmt::print("{}\n", r->size());
 
-  fmt::print("{}\n", routing_result.journeys_->size());
 }

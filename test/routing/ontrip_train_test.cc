@@ -39,7 +39,7 @@ TEST(routing, ontrip_train) {
                         10_minutes, 77U}}};
   generate_ontrip_train_query(tt, t->first, 1, q);
 
-  auto const results = *raptor_search(tt, nullptr, std::move(q), reach_mode::kNoReach).journeys_;
+  auto const results = *raptor_search(tt, nullptr, std::move(q), noReach()).journeys_;
 
   std::stringstream ss;
   ss << "\n";

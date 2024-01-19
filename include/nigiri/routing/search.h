@@ -136,7 +136,7 @@ struct search {
          search_state& s,
          algo_state_t& algo_state,
          query q,
-         reach_mode rm)
+         reach_mode_flags rm)
       : tt_{tt},
         rtt_{rtt},
         state_{s},
@@ -151,7 +151,7 @@ struct search {
                 }},
             q_.start_time_)},
         fastest_direct_{get_fastest_direct(tt_, q_, SearchDir)},
-        reach_mode_{rm},
+        reach_mode_flags_{rm},
         algo_{init(algo_state)} {}
 
   routing_result<algo_stats_t> execute() {
@@ -333,7 +333,7 @@ private:
 
   void search_interval() {
     reach_store_idx_t rs_idx = reach_store_idx_t::invalid();
-    if (reach_mode_ != reach_mode::kNoReach) {
+    if (reach_mode_flags_) {
       interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
       for (auto i = 0; i < tt_.reach_stores_.size(); ++i) {
         if (rs_valid_for(tt_.reach_stores_[reach_store_idx_t{i}], search_interval)) {
@@ -357,12 +357,12 @@ private:
           }
 
           reach_config_t rc = {
-              .mode_ = reach_mode_,
+              .mode_flags_ = reach_mode_flags_,
               .reach_store_idx_ = rs_idx
           };
 
           if (start_time >= search_interval_.to_) {
-            rc.mode_ = reach_mode::kNoReach;
+            rc.mode_flags_ = noReach();
           }
 
           auto const worst_time_at_dest =
@@ -388,7 +388,7 @@ private:
   interval<unixtime_t> search_interval_;
   search_stats stats_;
   duration_t fastest_direct_;
-  reach_mode reach_mode_;
+  reach_mode_flags reach_mode_flags_;
   Algo algo_;
 };
 

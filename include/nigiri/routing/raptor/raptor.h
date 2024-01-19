@@ -277,15 +277,13 @@ private:
           reach_t const& reach = rs.location_reach_[i];
           std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
 
-          if ((reach_config.mode_ == reach_mode::kTransferReach ||
-               reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+          if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
               not_optimal_by_transport_reach(reach, k, lb_[i].transports_)) {
             ++stats_.fp_update_prevented_by_reach_;
                continue;
           }
 
-          if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
-               reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+          if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
               not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
             ++stats_.fp_update_prevented_by_reach_;
                continue;
@@ -343,15 +341,13 @@ private:
             reach_t const& reach = rs.location_reach_[target];
             std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
 
-            if ((reach_config.mode_ == reach_mode::kTransferReach ||
-                 reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+            if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
                 not_optimal_by_transport_reach(reach, k, lb_[target].transports_)) {
               ++stats_.fp_update_prevented_by_reach_;
               continue;
             }
 
-            if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
-                 reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+            if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
                 not_optimal_by_travel_time_reach(reach, min_from_start, lb_[target].travel_time_)) {
               ++stats_.fp_update_prevented_by_reach_;
               continue;
@@ -517,15 +513,13 @@ private:
             reach_t const& reach = get_transport_reach(rs, stop_idx, et.t_idx_);
             std::uint16_t min_from_start = by_transport - unix_to_delta(base(), start_time);
 
-            if ((reach_config.mode_ == reach_mode::kTransferReach ||
-                 reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+            if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
                 not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
             }
 
-            if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
-                 reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+            if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
                 not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
@@ -587,15 +581,13 @@ private:
         reach_t const& reach = rs.route_location_reach_[r][stop_idx];
         std::uint16_t min_from_start = state_.round_times_[k - 1][l_idx] - unix_to_delta(base(), start_time);
 
-          if ((reach_config.mode_ == reach_mode::kTransferReach ||
-               reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+          if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
               not_optimal_by_transport_reach(reach, k-1, lb_[l_idx].transports_)) {
                 ++stats_.route_scan_prevented_by_reach_;
                 continue;
           }
 
-          if ((reach_config.mode_ == reach_mode::kTravelTimeReach ||
-               reach_config.mode_ == reach_mode::kTransferTravelTimeRach) &&
+          if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
               not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
                 ++stats_.route_scan_prevented_by_reach_;
                 continue;
