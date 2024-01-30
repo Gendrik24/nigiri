@@ -181,6 +181,7 @@ struct reach_config_t {
 constexpr reach_config_t noReachConfig() {
   return {
       .reach_store_idx_ = reach_store_idx_t::invalid(),
+      .reach_scope_in_ = reach_scope::kLocation,
       .mode_flags_in_ = noReach(),
   };
 }

@@ -138,6 +138,7 @@ routing_result<raptor_stats> raptor_intermodal_search(
                        std::move(q),
                        reach_config_t{
                            .reach_store_idx_ = reach_store_idx_t::invalid(),
+                           .reach_scope_in_ = reach_scope::kLocation,
                            .mode_flags_in_ = noReach()
                        },
                        search_dir);
