@@ -136,7 +136,7 @@ struct search {
          search_state& s,
          algo_state_t& algo_state,
          query q,
-         reach_mode_flags rm)
+         reach_config_t rc)
       : tt_{tt},
         rtt_{rtt},
         state_{s},
@@ -151,7 +151,7 @@ struct search {
                 }},
             q_.start_time_)},
         fastest_direct_{get_fastest_direct(tt_, q_, SearchDir)},
-        reach_mode_flags_{rm},
+        reach_config_{rc},
         algo_{init(algo_state)} {}
 
   routing_result<algo_stats_t> execute() {
@@ -328,19 +328,23 @@ private:
   }
 
   static bool rs_valid_for(reach_store const& rs, interval<unixtime_t> search_interval) {
-    return rs.valid_range_.from_ <= search_interval.from_ && search_interval.to_ <= rs.valid_range_.to_;
+    return rs.valid_range_.from_ <= search_interval.from_ && search_interval.to_ + 1_days <= rs.valid_range_.to_;
   }
 
   void search_interval() {
+    reach_config_t cfg = reach_config_;
+
     reach_store_idx_t rs_idx = reach_store_idx_t::invalid();
-    if (reach_mode_flags_) {
+    if (reach_config_.mode_flags_in_) {
       interval<unixtime_t> search_interval = {state_.starts_.back().time_at_start_, state_.starts_.front().time_at_start_};
       for (auto i = 0; i < tt_.reach_stores_.size(); ++i) {
         if (rs_valid_for(tt_.reach_stores_[reach_store_idx_t{i}], search_interval)) {
           rs_idx = reach_store_idx_t{i};
+          break;
         }
       }
     }
+    cfg.reach_store_idx_ = rs_idx;
 
     utl::equal_ranges_linear(
         state_.starts_,
@@ -356,20 +360,18 @@ private:
             algo_.add_start(s.stop_, s.time_at_stop_);
           }
 
-          reach_config_t rc = {
-              .mode_flags_ = reach_mode_flags_,
-              .reach_store_idx_ = rs_idx
-          };
-
           if (start_time >= search_interval_.to_) {
-            rc.mode_flags_ = noReach();
+            cfg.mode_flags_in_ = cfg.mode_flags_in_ & ~reach_mode_flags::kTravelTimeReach;
+            if (cfg.reach_scope_in_ == reach_scope::kTransport) {
+              cfg.reach_scope_in_ = reach_scope::kRoute;
+            }
           }
 
           auto const worst_time_at_dest =
               start_time +
               (kFwd ? 1 : -1) * std::min(fastest_direct_, kMaxTravelTime);
           algo_.execute(start_time, q_.max_transfers_, worst_time_at_dest,
-                        state_.results_, rc);
+                        state_.results_, cfg);
 
           for (auto& j : state_.results_) {
             if (j.legs_.empty() &&
@@ -388,7 +390,7 @@ private:
   interval<unixtime_t> search_interval_;
   search_stats stats_;
   duration_t fastest_direct_;
-  reach_mode_flags reach_mode_flags_;
+  reach_config_t reach_config_;
   Algo algo_;
 };
 

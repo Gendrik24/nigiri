@@ -74,15 +74,47 @@ struct raptor {
     return reach.travel_time_reach_ < time_from_start && reach.travel_time_reach_ < time_to_end;
   }
 
-  reach_t const& get_transport_reach(reach_store const& rs,
-                                     stop_idx_t s,
-                                     transport_idx_t t) {
+  reach_t get_location_reach(reach_store const& rs,
+                             stop_idx_t stp_idx,
+                             transport_idx_t t) {
+    const auto r = tt_.transport_route_[t];
+    const auto stp = stop{tt_.route_location_seq_[r][stp_idx]};
+    return rs.location_reach_[to_idx(stp.location_idx())];
+  }
+
+  reach_t get_route_reach(reach_store const& rs,
+                          stop_idx_t s,
+                          transport_idx_t t) {
     const auto r = tt_.transport_route_[t];
     const auto& range = rs.route_reach_value_ranges_[r];
     const auto& trip_range = tt_.route_transport_ranges_[r];
-    const auto t_offset = t - tt_.route_transport_ranges_[r].from_;
 
-    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size()) + to_idx(t_offset)];
+    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size() + 1)];
+  }
+
+  reach_t get_transport_reach(reach_store const& rs,
+                              stop_idx_t s,
+                              transport_idx_t t) {
+    const auto r = tt_.transport_route_[t];
+    const auto& range = rs.route_reach_value_ranges_[r];
+    const auto& trip_range = tt_.route_transport_ranges_[r];
+    const auto t_offset = t - tt_.route_transport_ranges_[r].from_ + 1;
+
+    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size() + 1) + to_idx(t_offset)];
+  }
+
+  reach_t get_reach(reach_store const& rs,
+                    reach_scope scope,
+                    stop_idx_t s,
+                    transport_idx_t t) {
+    switch(scope) {
+      case reach_scope::kLocation:
+        return get_location_reach(rs, s, t);
+      case reach_scope::kRoute:
+        return get_route_reach(rs, s, t);
+      default:
+        return get_transport_reach(rs, s, t);
+    }
   }
 
   raptor(timetable const& tt,
@@ -208,8 +240,8 @@ struct raptor {
       std::swap(state_.prev_station_mark_, state_.station_mark_);
       utl::fill(state_.station_mark_, false);
 
-      update_transfers(k, reach_config, start_time);
-      update_footpaths(k, reach_config, start_time);
+      update_transfers(k);
+      update_footpaths(k);
       update_intermodal_footpaths(k);
 
       trace_print_state_after_round();
@@ -252,7 +284,7 @@ private:
     return tt_.internal_interval_days().from_ + as_int(base_) * date::days{1};
   }
 
-  void update_transfers(unsigned const k, reach_config_t const& reach_config, unixtime_t start_time) {
+  void update_transfers(unsigned const k) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -272,26 +304,6 @@ private:
           continue;
         }
 
-        if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {
-          reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
-          reach_t const& reach = rs.location_reach_[i];
-          std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
-
-          if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
-              not_optimal_by_transport_reach(reach, k, lb_[i].transports_)) {
-            ++stats_.fp_update_prevented_by_reach_;
-               continue;
-          }
-
-          if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
-              not_optimal_by_travel_time_reach(reach, min_from_start, lb_[i].travel_time_)) {
-            ++stats_.fp_update_prevented_by_reach_;
-               continue;
-          }
-
-        }
-
-
         ++stats_.n_earliest_arrival_updated_by_footpath_;
         state_.round_times_[k][i] = fp_target_time;
         state_.best_[i] = fp_target_time;
@@ -303,7 +315,7 @@ private:
     }
   }
 
-  void update_footpaths(unsigned const k, reach_config_t const& reach_config, unixtime_t start_time) {
+  void update_footpaths(unsigned const k) {
     for (auto i = 0U; i != n_locations_; ++i) {
       if (!state_.prev_station_mark_[i]) {
         continue;
@@ -334,25 +346,6 @@ private:
                 to_unix(clamp(fp_target_time + dir(lower_bound))),
                 to_unix(time_at_dest_[k]));
             continue;
-          }
-
-          if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {
-            reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
-            reach_t const& reach = rs.location_reach_[target];
-            std::uint16_t min_from_start = fp_target_time - unix_to_delta(base(), start_time);
-
-            if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
-                not_optimal_by_transport_reach(reach, k, lb_[target].transports_)) {
-              ++stats_.fp_update_prevented_by_reach_;
-              continue;
-            }
-
-            if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
-                not_optimal_by_travel_time_reach(reach, min_from_start, lb_[target].travel_time_)) {
-              ++stats_.fp_update_prevented_by_reach_;
-              continue;
-            }
-
           }
 
           trace_upd(
@@ -510,16 +503,16 @@ private:
 
           if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {
             reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
-            reach_t const& reach = get_transport_reach(rs, stop_idx, et.t_idx_);
+            reach_t reach = get_reach(rs, reach_config.reach_scope_in_, stop_idx, et.t_idx_);
             std::uint16_t min_from_start = by_transport - unix_to_delta(base(), start_time);
 
-            if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
+            if ((reach_config.mode_flags_in_ & reach_mode_flags::kTransferReach) &&
                 not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
             }
 
-            if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
+            if ((reach_config.mode_flags_in_ & reach_mode_flags::kTravelTimeReach) &&
                 not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
               ++stats_.route_update_prevented_by_reach_;
               continue;
@@ -575,25 +568,6 @@ private:
       if (lb_[l_idx].travel_time_ == lower_bound::kTravelTimeUnreachable) {
         break;
       }
-      
-      if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {  
-        reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
-        reach_t const& reach = rs.route_location_reach_[r][stop_idx];
-        std::uint16_t min_from_start = state_.round_times_[k - 1][l_idx] - unix_to_delta(base(), start_time);
-
-          if ((reach_config.mode_flags_ & reach_mode_flags::kTransferReach) &&
-              not_optimal_by_transport_reach(reach, k-1, lb_[l_idx].transports_)) {
-                ++stats_.route_scan_prevented_by_reach_;
-                continue;
-          }
-
-          if ((reach_config.mode_flags_ & reach_mode_flags::kTravelTimeReach) &&
-              not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
-                ++stats_.route_scan_prevented_by_reach_;
-                continue;
-          }
-
-      }      
         
       auto const et_time_at_stop =
           et.is_valid()

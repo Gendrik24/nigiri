@@ -13,8 +13,10 @@ struct reach_t {
 
 struct reach_store {
   interval<unixtime_t> valid_range_;
+
+  // [ loc_0_reach | loc_1_reach | loc_2_reach | ... ]
   vector<reach_t> location_reach_;
-  vecvec<route_idx_t, reach_t> route_location_reach_;
+
   vector_map<route_idx_t, interval<std::uint32_t>> route_reach_value_ranges_;
   vector<reach_t> reach_values_;
 };

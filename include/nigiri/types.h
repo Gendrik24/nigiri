@@ -100,23 +100,6 @@ using optional = cista::optional<T>;
 template <typename Key, typename T, std::size_t N>
 using nvec = cista::raw::nvec<Key, T, N>;
 
-enum reach_mode_flags {
-  kTransferReach = 1,
-  kTravelTimeReach = 2
-};
-
-inline reach_mode_flags operator|(reach_mode_flags a, reach_mode_flags b) {
-  return static_cast<reach_mode_flags>(a | b);
-}
-
-inline reach_mode_flags operator&(reach_mode_flags a, reach_mode_flags b) {
-  return static_cast<reach_mode_flags>(a & b);
-}
-
-constexpr reach_mode_flags noReach() {
-  return static_cast<reach_mode_flags>(0);
-}
-
 using bitfield_idx_t = cista::strong<std::uint32_t, struct _bitfield_idx>;
 using location_idx_t = cista::strong<std::uint32_t, struct _location_idx>;
 using component_idx_t = cista::strong<std::uint32_t, struct _component_idx>;
@@ -160,6 +143,47 @@ using attribute_combination_idx_t =
 using provider_idx_t = cista::strong<std::uint32_t, struct _provider_idx>;
 
 using transport_range_t = pair<transport_idx_t, interval<stop_idx_t>>;
+
+enum reach_mode_flags {
+  kTransferReach = 1,
+  kTravelTimeReach = 2
+};
+
+inline reach_mode_flags operator|(reach_mode_flags a, reach_mode_flags b) {
+  return static_cast<reach_mode_flags>(static_cast<int>(a) | static_cast<int>(b));
+}
+
+inline reach_mode_flags operator&(reach_mode_flags a, reach_mode_flags b) {
+  return static_cast<reach_mode_flags>(static_cast<int>(a) & static_cast<int>(b));
+}
+
+inline reach_mode_flags operator~(reach_mode_flags a) {
+  return static_cast<reach_mode_flags>(~static_cast<int>(a));
+}
+
+constexpr reach_mode_flags noReach() {
+  return static_cast<reach_mode_flags>(0);
+}
+
+enum reach_scope {
+  kLocation,
+  kRoute,
+  kTransport
+};
+
+struct reach_config_t {
+  reach_store_idx_t reach_store_idx_;
+
+  reach_scope reach_scope_in_;
+  reach_mode_flags mode_flags_in_;
+};
+
+constexpr reach_config_t noReachConfig() {
+  return {
+      .reach_store_idx_ = reach_store_idx_t::invalid(),
+      .mode_flags_in_ = noReach(),
+  };
+}
 
 struct trip_debug {
   source_file_idx_t source_file_idx_;
@@ -211,11 +235,6 @@ struct transport {
   constexpr bool is_valid() const { return day_ != day_idx_t::invalid(); }
   transport_idx_t t_idx_{transport_idx_t::invalid()};
   day_idx_t day_{day_idx_t::invalid()};
-};
-
-struct reach_config_t {
-  reach_mode_flags mode_flags_;
-  reach_store_idx_t reach_store_idx_;
 };
 
 using i32_minutes = std::chrono::duration<std::int32_t, std::ratio<60>>;
