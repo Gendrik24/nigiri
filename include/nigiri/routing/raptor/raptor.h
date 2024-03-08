@@ -94,8 +94,7 @@ struct raptor {
 
   reach_t get_route_reach_out(reach_store const& rs,
                               stop_idx_t s,
-                              transport_idx_t t) {
-    const auto r = tt_.transport_route_[t];
+                              route_idx_t r) {
     const auto range = rs.route_reach_value_ranges_[r];
     const auto n_trips = tt_.route_transport_ranges_[r].size();
 
@@ -577,6 +576,24 @@ private:
 
       if (lb_[l_idx].travel_time_ == lower_bound::kTravelTimeUnreachable) {
         break;
+      }
+
+      if (reach_config.reach_store_idx_ != reach_store_idx_t::invalid()) {
+        reach_store const& rs = tt_.reach_stores_[reach_config.reach_store_idx_];
+        reach_t reach = get_route_reach_out(rs, stop_idx, r);
+        std::uint16_t min_from_start = state_.round_times_[k - 1][l_idx] - unix_to_delta(base(), start_time);
+
+        if ((reach_config.mode_flags_out_ & reach_mode_flags::kTransferReach) &&
+            not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_)) {
+          ++stats_.route_scan_prevented_by_reach_;
+          continue;
+        }
+
+        if ((reach_config.mode_flags_out_ & reach_mode_flags::kTravelTimeReach) &&
+            not_optimal_by_travel_time_reach(reach, min_from_start, lb_[l_idx].travel_time_)) {
+          ++stats_.route_scan_prevented_by_reach_;
+          continue;
+        }
       }
         
       auto const et_time_at_stop =
