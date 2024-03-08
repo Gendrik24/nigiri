@@ -360,11 +360,12 @@ private:
             algo_.add_start(s.stop_, s.time_at_stop_);
           }
 
+          auto explicit_cfg = cfg;
           if (start_time >= search_interval_.to_) {
-            cfg.mode_flags_in_ = cfg.mode_flags_in_ & ~reach_mode_flags::kTravelTimeReach;
-            cfg.mode_flags_out_ = noReach();
-            if (cfg.reach_scope_in_ == reach_scope::kTransport) {
-              cfg.reach_scope_in_ = reach_scope::kRoute;
+            explicit_cfg.mode_flags_in_ = explicit_cfg.mode_flags_in_ & ~reach_mode_flags::kTravelTimeReach;
+            explicit_cfg.mode_flags_out_ = explicit_cfg.mode_flags_out_ & ~reach_mode_flags::kTravelTimeReach;
+            if (explicit_cfg.reach_scope_in_ == reach_scope::kTransport) {
+              explicit_cfg.reach_scope_in_ = reach_scope::kRoute;
             }
           }
 
@@ -372,7 +373,7 @@ private:
               start_time +
               (kFwd ? 1 : -1) * std::min(fastest_direct_, kMaxTravelTime);
           algo_.execute(start_time, q_.max_transfers_, worst_time_at_dest,
-                        state_.results_, cfg);
+                        state_.results_, explicit_cfg);
 
           for (auto& j : state_.results_) {
             if (j.legs_.empty() &&
