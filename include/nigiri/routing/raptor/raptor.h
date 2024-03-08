@@ -535,6 +535,7 @@ private:
           current_best = by_transport;
           any_marked = true;
         } else {
+          ++stats_.route_update_prevented_by_lower_bound_;
           trace(
               "┊ │k={}    *** NO UPD: at={}, name={}, dbg={}, "
               "time_by_transport={}, current_best=min({}, {}, {})={} => {} - "
@@ -584,7 +585,7 @@ private:
         std::uint16_t min_from_start = state_.round_times_[k - 1][l_idx] - unix_to_delta(base(), start_time);
 
         if ((reach_config.mode_flags_out_ & reach_mode_flags::kTransferReach) &&
-            not_optimal_by_transport_reach(reach, k, lb_[l_idx].transports_)) {
+            not_optimal_by_transport_reach(reach, k-1, lb_[l_idx].transports_)) {
           ++stats_.route_scan_prevented_by_reach_;
           continue;
         }
