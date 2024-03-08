@@ -17,6 +17,12 @@ namespace nigiri {
                           transport_idx_t t,
                           reach_t const& reach);
 
+  void update_route_reach_out(reach_store& rs,
+                              timetable const& tt,
+                              stop_idx_t s,
+                              transport_idx_t t,
+                              reach_t const& reach);
+
   void update_transport_reach(reach_store& rs,
                               timetable const& tt,
                               stop_idx_t s,

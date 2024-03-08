@@ -136,7 +136,7 @@ struct search {
          search_state& s,
          algo_state_t& algo_state,
          query q,
-         reach_config_t rc)
+         reach_search_cfg_t rc)
       : tt_{tt},
         rtt_{rtt},
         state_{s},
@@ -332,7 +332,7 @@ private:
   }
 
   void search_interval() {
-    reach_config_t cfg = reach_config_;
+    reach_search_cfg_t cfg = reach_config_;
 
     reach_store_idx_t rs_idx = reach_store_idx_t::invalid();
     if (reach_config_.mode_flags_in_) {
@@ -362,6 +362,7 @@ private:
 
           if (start_time >= search_interval_.to_) {
             cfg.mode_flags_in_ = cfg.mode_flags_in_ & ~reach_mode_flags::kTravelTimeReach;
+            cfg.mode_flags_out_ = noReach();
             if (cfg.reach_scope_in_ == reach_scope::kTransport) {
               cfg.reach_scope_in_ = reach_scope::kRoute;
             }
@@ -390,7 +391,7 @@ private:
   interval<unixtime_t> search_interval_;
   search_stats stats_;
   duration_t fastest_direct_;
-  reach_config_t reach_config_;
+  reach_search_cfg_t reach_config_;
   Algo algo_;
 };
 

@@ -14,7 +14,7 @@ template <direction SearchDir>
 routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            routing::query q,
-                                           reach_config_t cfg) {
+                                           reach_search_cfg_t cfg) {
   using algo_state_t = routing::raptor_state;
   static auto search_state = routing::search_state{};
   static auto algo_state = algo_state_t{};
@@ -35,7 +35,7 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
 routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            rt_timetable const* rtt,
                                            routing::query q,
-                                           reach_config_t cfg,
+                                           reach_search_cfg_t cfg,
                                            direction const search_dir) {
   if (search_dir == direction::kForward) {
     return raptor_search<direction::kForward>(tt, rtt, std::move(q), cfg);
@@ -49,7 +49,7 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            std::string_view from,
                                            std::string_view to,
                                            routing::start_time_t time,
-                                           reach_config_t cfg,
+                                           reach_search_cfg_t cfg,
                                            direction const search_dir) {
   auto const src = source_idx_t{0};
   auto q = routing::query{
@@ -66,7 +66,7 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            std::string_view from,
                                            std::string_view to,
                                            std::string_view time,
-                                           reach_config_t cfg,
+                                           reach_search_cfg_t cfg,
                                            direction const search_dir) {
   return raptor_search(tt, rtt, from, to, parse_time(time, "%Y-%m-%d %H:%M %Z"),
                        cfg, search_dir);
@@ -78,7 +78,7 @@ routing_result<raptor_stats> raptor_search(timetable const& tt,
                                            std::string_view to,
                                            std::string_view start_time,
                                            std::string_view end_time,
-                                           reach_config_t cfg,
+                                           reach_search_cfg_t cfg,
                                            direction const search_dir) {
   interval<unixtime_t> inter;
   inter.from_ = parse_time(start_time, "%Y-%m-%d %H:%M %Z");
@@ -136,11 +136,7 @@ routing_result<raptor_stats> raptor_intermodal_search(
   return raptor_search(tt,
                        rtt,
                        std::move(q),
-                       reach_config_t{
-                           .reach_store_idx_ = reach_store_idx_t::invalid(),
-                           .reach_scope_in_ = reach_scope::kLocation,
-                           .mode_flags_in_ = noReach()
-                       },
+                       noReachConfig(),
                        search_dir);
 }
 

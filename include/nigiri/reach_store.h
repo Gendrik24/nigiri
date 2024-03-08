@@ -17,6 +17,14 @@ struct reach_store {
   // [ loc_0_reach | loc_1_reach | loc_2_reach | ... ]
   vector<reach_t> location_reach_;
 
+  // Route 1:
+  //   stop-1: [route-reach-in, route-reach-out, trip1-reach, trip2-reach, ..., tripN-reach]
+  //   stop-2: [route-reach-in, route-reach-out, trip1-reach, trip2-reach, ..., tripN-reach]
+  //   ...
+  // Route 2:
+  //  stop-1: [...]
+  // ...
+  // RouteN: ...
   vector_map<route_idx_t, interval<std::uint32_t>> route_reach_value_ranges_;
   vector<reach_t> reach_values_;
 };

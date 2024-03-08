@@ -171,16 +171,20 @@ enum reach_scope {
   kTransport
 };
 
-struct reach_config_t {
+struct reach_search_cfg_t {
   reach_store_idx_t reach_store_idx_;
+
+  //Defaults to reach_scope Route
+  reach_mode_flags mode_flags_out_;
 
   reach_scope reach_scope_in_;
   reach_mode_flags mode_flags_in_;
 };
 
-constexpr reach_config_t noReachConfig() {
+constexpr reach_search_cfg_t noReachConfig() {
   return {
       .reach_store_idx_ = reach_store_idx_t::invalid(),
+      .mode_flags_out_ = noReach(),
       .reach_scope_in_ = reach_scope::kLocation,
       .mode_flags_in_ = noReach(),
   };

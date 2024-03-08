@@ -19,6 +19,10 @@
 
 namespace nigiri {
 
+bool uses_transport(const routing::journey::leg& l) {
+  return holds_alternative<routing::journey::run_enter_exit>(l.uses_);
+}
+
 void update_location_reach(reach_store& rs,
                            location_idx_t loc,
                            reach_t const& reach) {
@@ -27,19 +31,32 @@ void update_location_reach(reach_store& rs,
   r.travel_time_reach_ = std::max(r.travel_time_reach_, reach.travel_time_reach_);
 }
 
-
 void update_route_reach(reach_store& rs,
                         timetable const& tt,
                         stop_idx_t s,
                         transport_idx_t t,
                         reach_t const& reach) {
-  const route_idx_t r = tt.transport_route_[t];
-  const auto& range = rs.route_reach_value_ranges_[r];
-  const auto& trip_range = tt.route_transport_ranges_[r];
-  const auto r_idx = range.from_ + s * to_idx(trip_range.size() + 1);
-  reach_t& rch = rs.reach_values_[r_idx];
-  rch.transport_reach_ = std::max(rch.transport_reach_, reach.transport_reach_);
-  rch.travel_time_reach_ = std::max(rch.travel_time_reach_, reach.travel_time_reach_);
+  const route_idx_t route_idx = tt.transport_route_[t];
+  const auto range = rs.route_reach_value_ranges_[route_idx];
+  const auto n_trips = tt.route_transport_ranges_[route_idx].size();
+  const auto reach_idx = range.from_ + s * to_idx(n_trips + 2);
+  reach_t& max_rch = rs.reach_values_[reach_idx];
+  max_rch.transport_reach_ = std::max(max_rch.transport_reach_, reach.transport_reach_);
+  max_rch.travel_time_reach_ = std::max(max_rch.travel_time_reach_, reach.travel_time_reach_);
+}
+
+void update_route_reach_out(reach_store& rs,
+                            timetable const& tt,
+                            stop_idx_t s,
+                            transport_idx_t t,
+                            reach_t const& reach) {
+  const route_idx_t route_idx = tt.transport_route_[t];
+  const auto range = rs.route_reach_value_ranges_[route_idx];
+  const auto n_trips = tt.route_transport_ranges_[route_idx].size();
+  const auto reach_idx = range.from_ + s * to_idx(n_trips + 2) + 1;
+  reach_t& max_rch = rs.reach_values_[reach_idx];
+  max_rch.transport_reach_ = std::max(max_rch.transport_reach_, reach.transport_reach_);
+  max_rch.travel_time_reach_ = std::max(max_rch.travel_time_reach_, reach.travel_time_reach_);
 }
 
 void update_transport_reach(reach_store& rs,
@@ -48,9 +65,9 @@ void update_transport_reach(reach_store& rs,
                             transport_idx_t t,
                             reach_t const& reach) {
   const auto r = tt.transport_route_[t];
-  const auto& range = rs.route_reach_value_ranges_[r];
-  const auto& trip_range = tt.route_transport_ranges_[r];
-  const auto r_idx = range.from_ + s * to_idx(trip_range.size() + 1) + to_idx(t - tt.route_transport_ranges_[r].from_ + 1);
+  const auto range = rs.route_reach_value_ranges_[r];
+  const auto trip_range = tt.route_transport_ranges_[r];
+  const auto r_idx = range.from_ + s * to_idx(trip_range.size() + 2) + to_idx(t - trip_range.from_ + 2);
   reach_t& rch = rs.reach_values_[r_idx];
   rch.transport_reach_ = std::max(rch.transport_reach_, reach.transport_reach_);
   rch.travel_time_reach_ = std::max(rch.travel_time_reach_, reach.travel_time_reach_);
@@ -63,16 +80,30 @@ void compute_reach(reach_store& rs,
   uint8_t n_transports_seen{0U};
   for (auto const& leg : j.legs_) {
 
+    uint16_t travel_time_reach = std::min(
+        (leg.dep_time_- j.start_time_).count(),
+        (j.dest_time_ - leg.dep_time_).count());
+
     uint8_t transport_reach = std::min(
         n_transports_seen,
         static_cast<uint8_t>(n_transports_total - n_transports_seen));
 
-    uint16_t travel_time_reach = std::min(
+    if (uses_transport(leg)) {
+      const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
+      const auto t_idx = run.r_.t_.t_idx_;
+      update_route_reach_out(rs,
+                             tt,
+                             run.stop_range_.from_,
+                             t_idx,
+                             {transport_reach, travel_time_reach});
+    }
+
+    travel_time_reach = std::min(
         (leg.arr_time_- j.start_time_).count(),
         (j.dest_time_ - leg.arr_time_).count());
 
 
-    if (holds_alternative<nigiri::routing::journey::run_enter_exit>(leg.uses_)) {
+    if (uses_transport(leg)) {
       const auto& run = std::get<nigiri::routing::journey::run_enter_exit>(leg.uses_);
       const auto t_idx = run.r_.t_.t_idx_;
 
@@ -151,7 +182,7 @@ void init_reach_store(reach_store& rs, timetable const& tt) {
     const auto n_stops = tt.route_location_seq_[r].size();
     const auto n_trips = tt.route_transport_ranges_[r].size();
     std::vector<reach_t> f;
-    f.resize(to_idx(n_trips + 1) * n_stops);
+    f.resize(to_idx(n_trips + 2) * n_stops);
     std::fill(f.begin(), f.end(), reach_t{0U, 0U});
     rs.route_reach_value_ranges_.emplace_back(rs.reach_values_.size(), rs.reach_values_.size() + f.size());
     rs.reach_values_.insert(rs.reach_values_.end(), f.begin(), f.end());

@@ -86,21 +86,31 @@ struct raptor {
                           stop_idx_t s,
                           transport_idx_t t) {
     const auto r = tt_.transport_route_[t];
-    const auto& range = rs.route_reach_value_ranges_[r];
-    const auto& trip_range = tt_.route_transport_ranges_[r];
+    const auto range = rs.route_reach_value_ranges_[r];
+    const auto n_trips = tt_.route_transport_ranges_[r].size();
 
-    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size() + 1)];
+    return rs.reach_values_[range.from_ + s * to_idx(n_trips + 2)];
+  }
+
+  reach_t get_route_reach_out(reach_store const& rs,
+                              stop_idx_t s,
+                              transport_idx_t t) {
+    const auto r = tt_.transport_route_[t];
+    const auto range = rs.route_reach_value_ranges_[r];
+    const auto n_trips = tt_.route_transport_ranges_[r].size();
+
+    return rs.reach_values_[range.from_ + s * to_idx(n_trips + 2) + 1];
   }
 
   reach_t get_transport_reach(reach_store const& rs,
                               stop_idx_t s,
                               transport_idx_t t) {
     const auto r = tt_.transport_route_[t];
-    const auto& range = rs.route_reach_value_ranges_[r];
-    const auto& trip_range = tt_.route_transport_ranges_[r];
-    const auto t_offset = t - tt_.route_transport_ranges_[r].from_ + 1;
+    const auto range = rs.route_reach_value_ranges_[r];
+    const auto trip_range = tt_.route_transport_ranges_[r];
+    const auto t_offset = t - trip_range.from_ + 2;
 
-    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size() + 1) + to_idx(t_offset)];
+    return rs.reach_values_[range.from_ + s * to_idx(trip_range.size() + 2) + to_idx(t_offset)];
   }
 
   reach_t get_reach(reach_store const& rs,
@@ -169,7 +179,7 @@ struct raptor {
                std::uint8_t const max_transfers,
                unixtime_t const worst_time_at_dest,
                pareto_set<journey>& results,
-               reach_config_t const& reach_config) {
+               reach_search_cfg_t const& reach_config) {
     auto const end_k = std::min(max_transfers, kMaxTransfers) + 1U;
 
     auto const d_worst_at_dest = unix_to_delta(base(), worst_time_at_dest);
@@ -456,7 +466,7 @@ private:
     return any_marked;
   }
 
-  bool update_route(unsigned const k, route_idx_t const r, reach_config_t const& reach_config, unixtime_t start_time) {
+  bool update_route(unsigned const k, route_idx_t const r, reach_search_cfg_t const& reach_config, unixtime_t start_time) {
     auto const stop_seq = tt_.route_location_seq_[r];
     bool any_marked = false;
 
