@@ -145,14 +145,15 @@ void compute_reach(reach_store& rs,
                    unsigned int num_threads) {
   boost::mutex mtx_;
   std::size_t n_locations_finished = 9U;
+  UTL_START_TIMING(rch);
 
   auto const reach_from_loc = [&] (std::size_t loc_start) -> void {
     const auto& results = nigiri::routing::mc_raptor_search(tt,
                                                             location{tt, location_idx_t{loc_start}}.id_,
                                                             time_range);
-
     mtx_.lock();
     for (std::size_t loc_tgt = 0U; loc_tgt < tt.n_locations(); ++loc_tgt) {
+      rs.stats_.n_journeys_computed_ += results[loc_tgt].size();
       compute_reach(rs, tt,  results[loc_tgt]);
     }
     n_locations_finished++;
@@ -169,6 +170,8 @@ void compute_reach(reach_store& rs,
     boost::asio::post(pool, [&,loc_start] {reach_from_loc(loc_start);});
   }
   pool.join();
+  UTL_STOP_TIMING(rch);
+  rs.stats_.compute_time_s_ += static_cast<std::uint64_t>(UTL_TIMING_MS(rch));
   }
 
 void init_reach_store(reach_store& rs, timetable const& tt) {
@@ -210,6 +213,7 @@ void extend_reach_store_by(reach_store_idx_t rs_idx,
   }
 
   reach_store& rs = tt.reach_stores_[rs_idx];
+
   if (duration < duration_t::zero()) {
     compute_reach(rs, tt,
                   {rs.valid_range_.from_ + duration, rs.valid_range_.from_}, num_threads);

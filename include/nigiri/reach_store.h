@@ -11,6 +11,14 @@ struct reach_t {
   std::uint16_t travel_time_reach_;
 };
 
+struct reach_stats {
+  CISTA_PRINTABLE(reach_stats,
+                  "compute_time_s",
+                  "n_journeys_computed")
+  std::uint64_t compute_time_s_{0ULL};
+  std::uint64_t n_journeys_computed_{0ULL};
+};
+
 struct reach_store {
   interval<unixtime_t> valid_range_;
 
@@ -27,6 +35,8 @@ struct reach_store {
   // RouteN: ...
   vector_map<route_idx_t, interval<std::uint32_t>> route_reach_value_ranges_;
   vector<reach_t> reach_values_;
+
+  reach_stats stats_;
 };
 
 } // namespace nigiri
