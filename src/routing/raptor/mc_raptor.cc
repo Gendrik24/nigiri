@@ -466,13 +466,13 @@ interval<stop_idx_t> mc_raptor::find_enter_exit(transport const via,
     auto const stp = stop{stop_sequence[stop_idx]};
 
     if (!entered &&
-        stp.location_idx() == enter &&
+        stp.location_idx() == enter && stp.in_allowed() &&
         enter_after.to_unixtime(tt_) <= tt_.event_time(via, stop_idx, event_type::kDep)) {
       enter_exit.from_ = stop_idx;
       entered = true;
     }
 
-    if (stp.location_idx() == exit && entered) {
+    if (stp.location_idx() == exit && entered && stp.out_allowed()) {
       enter_exit.to_ = stop_idx;
       break;
     }
